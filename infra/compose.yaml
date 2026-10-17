@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: geevheittire
+      POSTGRES_USER: geevheit
+      POSTGRES_PASSWORD: local-development
+    ports: ["5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geevheit -d geevheittire"]
+      interval: 3s
+      retries: 20
+  migrate:
+    build: ../api
+    command: ["/app/migrate"]
+    environment:
+      DATABASE_URL: postgres://geevheit:local-development@db:5432/geevheittire?sslmode=disable
+    depends_on:
+      db: {condition: service_healthy}
+  api:
+    build: ../api
+    environment:
+      DATABASE_URL: postgres://geevheit:local-development@db:5432/geevheittire?sslmode=disable
+      JWT_SECRET: local-development-secret-change-in-production
+      APP_URL: http://localhost:3000
+    ports: ["8080:8080"]
+    depends_on:
+      db: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+  web:
+    build: ../web
+    environment: {API_URL: "http://api:8080"}
+    ports: ["3000:3000"]
+    depends_on: [api]
+volumes:
+  postgres_data:

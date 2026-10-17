@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+.vercel/
+.dart_tool/
+build/
+*.log
+.DS_Store
