@@ -132,7 +132,7 @@ func validCNPJ(s string) bool {
 		sum := 0
 		weight := n - 7
 		for i := 0; i < n; i++ {
-			if s[i] < '0' || s[i] > '9' {
+			if !((s[i] >= '0' && s[i] <= '9') || (i < 12 && s[i] >= 'A' && s[i] <= 'Z')) {
 				return false
 			}
 			sum += int(s[i]-'0') * weight
@@ -205,6 +205,9 @@ func (a *App) tx(r *http.Request) (pgx.Tx, error) {
 	return t, nil
 }
 func (a *App) session(ctx context.Context, t pgx.Tx, u identity) (map[string]any, error) {
+	if _, e := t.Exec(ctx, "select set_config('app.company_id',$1,true)", u.Company); e != nil {
+		return nil, e
+	}
 	now := time.Now()
 	c := Claims{u.Company, u.Role, jwt.RegisteredClaims{Subject: u.ID, Issuer: "geevheittire", IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute))}}
 	access, e := jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString(a.secret)
@@ -234,6 +237,9 @@ func (a *App) mail(ctx context.Context, email, subject, link string) error {
 	return nil
 }
 func (a *App) accountToken(ctx context.Context, t pgx.Tx, u identity, kind string) (string, error) {
+	if _, e := t.Exec(ctx, "select set_config('app.company_id',$1,true)", u.Company); e != nil {
+		return "", e
+	}
 	raw := randomToken()
 	_, e := t.Exec(ctx, "insert into account_tokens(id,company_id,user_id,token_hash,kind,expires_at) values($1,$2,$3,$4,$5,now()+interval '24 hours')", id(), u.Company, u.ID, hashToken(raw), kind)
 	return raw, e
@@ -244,7 +250,7 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Email = strings.ToLower(strings.TrimSpace(d.Email))
-	d.CNPJ = regexp.MustCompile(`\D`).ReplaceAllString(d.CNPJ, "")
+	d.CNPJ = regexp.MustCompile(`[./\s-]`).ReplaceAllString(strings.ToUpper(d.CNPJ), "")
 	if !validEmail(d.Email) || len(d.Password) < 10 || len(d.Password) > 128 || len(strings.TrimSpace(d.Name)) < 2 || len(strings.TrimSpace(d.Company)) < 2 || !validCNPJ(d.CNPJ) {
 		problem(w, 422, "Informe nome, empresa, e-mail, CNPJ válido e senha com 10 a 128 caracteres.")
 		return
@@ -257,12 +263,20 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	}
 	defer t.Rollback(ctx)
 	u := identity{id(), id(), d.Name, d.Email, "owner"}
+	if _, e = t.Exec(ctx, "select set_config('app.company_id',$1,true)", u.Company); e != nil {
+		problem(w, 500, "Falha ao iniciar empresa.")
+		return
+	}
 	_, e = t.Exec(ctx, "insert into companies(id,name,cnpj) values($1,$2,$3)", u.Company, d.Company, d.CNPJ)
 	if e == nil {
 		_, e = t.Exec(ctx, "insert into users(id,company_id,name,email,password_hash,role) values($1,$2,$3,$4,$5,'owner')", u.ID, u.Company, u.Name, u.Email, passwordHash(d.Password))
 	}
 	if e != nil {
 		problem(w, 409, "Não foi possível cadastrar. Verifique os dados ou entre com sua conta.")
+		return
+	}
+	if a.audit(ctx, t, &Claims{Company: u.Company, RegisteredClaims: jwt.RegisteredClaims{Subject: u.ID}}, "company", u.Company, map[string]string{"name": d.Company}) != nil {
+		problem(w, 500, "Falha ao registrar auditoria.")
 		return
 	}
 	raw, e := a.accountToken(ctx, t, u, "verify")
@@ -290,7 +304,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 	var u identity
 	var h string
-	e := a.db.QueryRow(r.Context(), "select id,company_id,name,email,role,password_hash from users where email=$1 and deleted_at is null", strings.ToLower(strings.TrimSpace(d.Email))).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role, &h)
+	e := a.db.QueryRow(r.Context(), "select id,company_id,name,email,role,password_hash from auth_find_user($1)", strings.ToLower(strings.TrimSpace(d.Email))).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role, &h)
 	if e != nil || !passwordOK(d.Password, h) {
 		problem(w, 401, "E-mail ou senha inválidos.")
 		return
@@ -323,12 +337,12 @@ func (a *App) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	defer t.Rollback(ctx)
 	var u identity
-	e = t.QueryRow(ctx, `select u.id,u.company_id,u.name,u.email,u.role from refresh_tokens r join users u on u.id=r.user_id where r.token_hash=$1 and r.revoked_at is null and r.expires_at>now() and u.deleted_at is null for update of r`, hashToken(d.Token)).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role)
+	e = t.QueryRow(ctx, `select id,company_id,name,email,role from auth_refresh($1)`, hashToken(d.Token)).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role)
 	if e != nil {
 		problem(w, 401, "Sessão expirada.")
 		return
 	}
-	_, e = t.Exec(ctx, "update refresh_tokens set revoked_at=now() where token_hash=$1", hashToken(d.Token))
+	_, e = t.Exec(ctx, "select auth_logout($1)", hashToken(d.Token))
 	if e != nil {
 		problem(w, 500, "Falha ao renovar sessão.")
 		return
@@ -347,7 +361,7 @@ func (a *App) logout(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &d) {
 		return
 	}
-	_, e := a.db.Exec(r.Context(), "update refresh_tokens set revoked_at=now() where token_hash=$1", hashToken(d.Token))
+	_, e := a.db.Exec(r.Context(), "select auth_logout($1)", hashToken(d.Token))
 	if e != nil {
 		problem(w, 503, "Banco indisponível.")
 		return
@@ -361,7 +375,7 @@ func (a *App) recover(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	var u identity
-	e := a.db.QueryRow(ctx, "select id,company_id,name,email,role from users where email=$1 and deleted_at is null", strings.ToLower(strings.TrimSpace(d.Email))).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role)
+	e := a.db.QueryRow(ctx, "select id,company_id,name,email,role from auth_find_user($1)", strings.ToLower(strings.TrimSpace(d.Email))).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role)
 	if e == nil {
 		t, err := a.db.Begin(ctx)
 		if err == nil {
@@ -388,10 +402,14 @@ func (a *App) accept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer t.Rollback(ctx)
-	var uid, kind string
-	e = t.QueryRow(ctx, "select user_id,kind from account_tokens where token_hash=$1 and used_at is null and expires_at>now() for update", hashToken(d.Token)).Scan(&uid, &kind)
+	var uid, kind, company string
+	e = t.QueryRow(ctx, "select user_id,kind,company_id from auth_account_token($1)", hashToken(d.Token)).Scan(&uid, &kind, &company)
 	if e != nil {
 		problem(w, 422, "Link inválido ou expirado.")
+		return
+	}
+	if _, e = t.Exec(ctx, "select set_config('app.company_id',$1,true)", company); e != nil {
+		problem(w, 500, "Falha ao validar conta.")
 		return
 	}
 	if kind != "verify" {
@@ -445,6 +463,10 @@ func (a *App) invite(w http.ResponseWriter, r *http.Request) {
 	_, e = t.Exec(ctx, "insert into users(id,company_id,name,email,password_hash,role) values($1,$2,$3,$4,$5,$6)", u.ID, u.Company, u.Name, u.Email, passwordHash(randomToken()), u.Role)
 	if e != nil {
 		problem(w, 409, "E-mail já cadastrado.")
+		return
+	}
+	if a.audit(ctx, t, c, "user", u.ID, u) != nil {
+		problem(w, 500, "Falha ao registrar auditoria.")
 		return
 	}
 	raw, e := a.accountToken(ctx, t, u, "invite")
@@ -703,7 +725,17 @@ func (a *App) inspect(w http.ResponseWriter, r *http.Request) {
 			problem(w, 409, "Identificador já utilizado em outro pneu.")
 			return
 		}
-		write(w, 200, json.RawMessage(previous))
+		var replay struct {
+			ID             string `json:"id"`
+			Status         string `json:"status"`
+			Level          int    `json:"level"`
+			Recommendation string `json:"recommendation"`
+		}
+		if json.Unmarshal(previous, &replay) != nil {
+			problem(w, 500, "Falha ao recuperar inspeção.")
+			return
+		}
+		write(w, 200, map[string]any{"id": replay.ID, "classification": domain.Classification{Status: replay.Status, Level: replay.Level, Recommendation: replay.Recommendation}, "replayed": true})
 		return
 	}
 	if !errors.Is(e, pgx.ErrNoRows) {
@@ -726,7 +758,11 @@ func (a *App) inspect(w http.ResponseWriter, r *http.Request) {
 		if d.Pressure < 90 || d.Pressure > 120 {
 			msg += " Verifique a calibragem (referência inicial: 90–120 psi)."
 		}
-		_, e = t.Exec(ctx, "insert into alerts(id,company_id,tire_id,message,severity) values($1,$2,$3,$4,$5)", id(), c.Company, tid, msg, classification.Status)
+		severity := classification.Status
+		if severity == "ok" {
+			severity = "alerta"
+		}
+		_, e = t.Exec(ctx, "insert into alerts(id,company_id,tire_id,message,severity) values($1,$2,$3,$4,$5)", id(), c.Company, tid, msg, severity)
 	}
 	if e != nil || a.audit(ctx, t, c, "inspection", eid, d) != nil || t.Commit(ctx) != nil {
 		problem(w, 409, "Não foi possível salvar. Reenvie com o mesmo identificador.")
@@ -779,6 +815,7 @@ func (a *App) readAlert(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, map[string]bool{"ok": true})
 }
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	ctx := context.Background()
 	secret := os.Getenv("JWT_SECRET")
 	if len(secret) < 32 {
@@ -820,7 +857,13 @@ func main() {
 			r.Get("/me", func(w http.ResponseWriter, r *http.Request) {
 				c := claims(r)
 				var u identity
-				e := a.db.QueryRow(r.Context(), "select id,company_id,name,email,role from users where id=$1 and company_id=$2 and deleted_at is null", c.Subject, c.Company).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role)
+				tx, err := a.tx(r)
+				if err != nil {
+					problem(w, 503, "Banco indisponível.")
+					return
+				}
+				defer tx.Rollback(r.Context())
+				e := tx.QueryRow(r.Context(), "select id,company_id,name,email,role from users where id=$1 and company_id=$2 and deleted_at is null", c.Subject, c.Company).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role)
 				if e != nil {
 					problem(w, 401, "Conta indisponível.")
 					return
@@ -847,6 +890,7 @@ func main() {
 		slog.Info("GeevheitTire API listening", "port", port)
 		if e := server.ListenAndServe(); e != nil && e != http.ErrServerClosed {
 			slog.Error("server failed", "error", e)
+			os.Exit(1)
 		}
 	}()
 	stop := make(chan os.Signal, 1)
@@ -858,4 +902,14 @@ func main() {
 	fmt.Println("API encerrada")
 }
 
-func newPool(ctx context.Context)(*pgxpool.Pool,error){cfg,e:=pgxpool.ParseConfig(os.Getenv("DATABASE_URL"));if e!=nil{return nil,e};cfg.AfterConnect=func(ctx context.Context,c *pgx.Conn)error{_,e:=c.Exec(ctx,"SET ROLE geevheit_runtime");return e};return pgxpool.NewWithConfig(ctx,cfg)}
+func newPool(ctx context.Context) (*pgxpool.Pool, error) {
+	cfg, e := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	if e != nil {
+		return nil, e
+	}
+	cfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
+		_, e := c.Exec(ctx, "SET ROLE geevheit_runtime")
+		return e
+	}
+	return pgxpool.NewWithConfig(ctx, cfg)
+}

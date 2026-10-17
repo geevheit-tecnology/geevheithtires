@@ -5,7 +5,7 @@ services:
       POSTGRES_DB: geevheittire
       POSTGRES_USER: geevheit
       POSTGRES_PASSWORD: local-development
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: ["postgres_data:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U geevheit -d geevheittire"]
@@ -24,7 +24,7 @@ services:
       DATABASE_URL: postgres://geevheit:local-development@db:5432/geevheittire?sslmode=disable
       JWT_SECRET: local-development-secret-change-in-production
       APP_URL: http://localhost:3000
-    ports: ["8080:8080"]
+    ports: ["8087:8080"]
     depends_on:
       db: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
