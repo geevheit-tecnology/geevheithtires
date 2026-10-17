@@ -2,7 +2,7 @@
 
 ## Situação
 
-Neon PostgreSQL e Auth foram configurados e validados com a aplicação local. Veja [NEON.md](NEON.md) para comandos e evidências. A hospedagem pública da API e a entrega real de e-mail continuam pendentes.
+Neon PostgreSQL e Auth foram configurados e validados com a aplicação local. Veja [NEON.md](NEON.md) para comandos e evidências. A API foi publicada na Render Free e a web em produção na Vercel. Veja [RENDER.md](RENDER.md). A entrega real de e-mail e a validação completa do fluxo público continuam pendentes.
 
 ## 1. PostgreSQL no Neon
 

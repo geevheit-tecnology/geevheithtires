@@ -6,6 +6,7 @@ import { ArrowRight, ShieldCheck } from "lucide-react";
 import { Brand } from "./brand";
 import { api } from "./api";
 import { neonClient, neonEnabled } from "./neon-client";
+import { validCNPJ } from "../lib/cnpj";
 export function AuthForm({
   mode,
 }: {
@@ -16,9 +17,13 @@ export function AuthForm({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [completingCompany, setCompletingCompany] = useState(false);
+  const companyDetails = mode === "register" || completingCompany;
   const verify = mode === "accept" && params.get("kind") === "verify";
   const title =
-    mode === "register"
+    completingCompany
+      ? "Complete o cadastro da sua empresa."
+      : mode === "register"
       ? "Sua frota merece uma gestão melhor."
       : mode === "recover"
         ? "Vamos recuperar seu acesso."
@@ -34,6 +39,12 @@ export function AuthForm({
     const form = new FormData(e.currentTarget);
     const data = Object.fromEntries(form);
     try {
+      if (companyDetails) {
+        if (String(data.company || "").trim().length < 2)
+          throw new Error("Informe o nome da empresa.");
+        if (!validCNPJ(String(data.cnpj || "")))
+          throw new Error("Informe um CNPJ válido para cadastrar sua empresa.");
+      }
       if (neonEnabled && mode === "recover") {
         const result = await neonClient.requestPasswordReset({
           email: String(data.email),
@@ -51,21 +62,24 @@ export function AuthForm({
       }
       let managedSession: unknown;
       if (neonEnabled && (mode === "login" || mode === "register")) {
+        const providerError = (reason: unknown) => ({
+          error: { message: reason instanceof Error ? reason.message : "Não foi possível autenticar sua conta." },
+        });
+        const signIn = () => neonClient.signIn.email({
+          email: String(data.email), password: String(data.password),
+        }).catch(providerError);
         let result =
           mode === "register"
             ? await neonClient.signUp.email({
                 name: String(data.name),
                 email: String(data.email),
                 password: String(data.password),
-              })
-            : await neonClient.signIn.email({
-                email: String(data.email),
-                password: String(data.password),
-              });
+              }).catch(providerError)
+            : await signIn();
         // A failed company submission may leave an authenticated Neon identity.
         // Prove the same credentials again before retrying company onboarding.
         if (result.error && mode === "register") {
-          result = await neonClient.signIn.email({email: String(data.email), password: String(data.password)});
+          result = await signIn();
         }
         if (result.error) {
           if (mode === "register")
@@ -80,7 +94,7 @@ export function AuthForm({
             );
           managedSession = await api("auth/neon", {
             token: token.data.token,
-            ...(mode === "register"
+            ...(companyDetails
               ? { name: data.name, company: data.company, cnpj: data.cnpj }
               : {}),
           });
@@ -99,7 +113,15 @@ export function AuthForm({
         router.refresh();
       }
     } catch (e) {
-      setError((e as Error).message);
+      const reason = (e as Error).message;
+      if (
+        neonEnabled && mode === "login" && !completingCompany &&
+        reason === "Complete o cadastro da empresa para vincular sua conta Neon."
+      ) {
+        setCompletingCompany(true);
+      } else {
+        setError(reason);
+      }
     } finally {
       setBusy(false);
     }
@@ -132,7 +154,9 @@ export function AuthForm({
           <span className="label">GEEVHEITTIRE</span>
           <h2>{title}</h2>
           <p>
-            {mode === "register"
+            {completingCompany
+              ? "Seu acesso já está criado. Preencha os dados da empresa para começar."
+              : mode === "register"
               ? "Comece seu período de avaliação de 14 dias, sem cartão."
               : "Use seu acesso à plataforma."}
           </p>
@@ -143,7 +167,7 @@ export function AuthForm({
             </div>
           ) : (
             <form onSubmit={submit}>
-              {mode === "register" && (
+              {companyDetails && (
                 <>
                   <label>
                     Seu nome
@@ -173,6 +197,7 @@ export function AuthForm({
                       autoCapitalize="characters"
                       maxLength={18}
                     />
+                    <small>Informe o CNPJ válido da sua empresa.</small>
                   </label>
                 </>
               )}
@@ -211,6 +236,8 @@ export function AuthForm({
               <button className="button" disabled={busy}>
                 {busy
                   ? "Aguarde…"
+                  : completingCompany
+                    ? "Concluir cadastro e entrar"
                   : mode === "register"
                     ? "Criar conta e começar"
                     : mode === "recover"

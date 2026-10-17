@@ -16,7 +16,8 @@
 | Inspeção, histórico e alertas internos | Fatia inicial do P1 implementada |
 | Configuração de deploy | Docker Compose, Dockerfiles, Fly.io e guia Neon/Vercel |
 | Neon PostgreSQL e Auth | Configurados no branch production; fluxo real validado localmente |
-| API publicada | Pendente de hospedagem; API conectada ao Neon em localhost:8097 |
+| API publicada | Render Free, health check conectado ao Neon validado |
+| Web publicada | Vercel em geevheittire.vercel.app; toolbar desativada |
 | Publicação nas lojas | Pendente |
 
 ## Limites desta entrega

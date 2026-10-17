@@ -31,7 +31,7 @@ Depois de aplicar as mesmas migrations em production, o navegador real passou ca
 
 ## Pendências
 
-API pública ainda não hospedada; a preview Vercel anterior não comprova este fluxo Neon. Ao publicar a API, configure as variáveis acima na hospedagem com URLs HTTPS reais e origens autorizadas no Neon. Configure e valide o envio de e-mail de recuperação/verificação; entrega de e-mail não foi testada. Recuperação web usa o provedor Neon quando habilitado. Valide também recuperação nativa e convites antes do lançamento comercial.
+API publicada em https://geevheittire-api.onrender.com e site em https://geevheittire.vercel.app. Health check da API validado; fluxo público completo ainda requer validação independente. Ao publicar a API, configure as variáveis acima na hospedagem com URLs HTTPS reais e origens autorizadas no Neon. Configure e valide o envio de e-mail de recuperação/verificação; entrega de e-mail não foi testada. Recuperação web usa o provedor Neon quando habilitado. Valide também recuperação nativa e convites antes do lançamento comercial.
 
 O backend inclui preparação de checklists em lote com idempotência. Checklist offline Flutter ainda não foi implementado; as dependências mobile adicionadas são preparação.
 
@@ -45,3 +45,10 @@ O hook local oficial foi instalado com `neon git install`. Confira com `neon git
 O workflow `.github/workflows/neon-preview.yml` cria um banco isolado por PR do próprio repositório, aplica migrations, executa testes e remove o branch ao fechar o PR. Não migra production automaticamente. A execução remota ainda depende de autorizar o GitHub App Neon: no projeto Neon, abra **Integrations → GitHub → Add → Install GitHub App**, selecione apenas `geevheit-tecnology/geevheithtires` e clique **Connect**. O App configura `NEON_API_KEY` como secret e `NEON_PROJECT_ID` como variável no GitHub. Não envie a chave no chat.
 
 A conexão Neon–Vercel é independente: conecte o projeto Neon existente pela integração de conta Neon, sem criar outro banco. GitHub hospedará o código e a Vercel fará os deploys. A aplicação atual acessa PostgreSQL pela API Go; portanto a web ainda precisa de `API_URL` apontando para uma API pública. O workflow de banco não configura variáveis da Vercel nem publica a API.
+
+
+## Recuperação de cadastro incompleto
+
+A identidade Neon pode existir mesmo quando o cadastro da empresa falha. O login agora abre os campos da empresa para esse caso, sem criar outra identidade nem associar contas por coincidência de e-mail. O formulário valida o CNPJ antes de criar novas identidades. Erros retornados ou lançados pelo SDK recebem tratamento equivalente, preservando o login de contas legadas e a retomada com e-mail já criado.
+
+Regressão em branch Neon isolado: `scripts/neon-onboarding-e2e.cjs`, com Playwright e Chrome. Configure `WEB_URL` e `API_URL` para os servidores desse branch (padrões localhost:3029 e localhost:8099). O roteiro cria dados de QA. Passaram: CNPJ inválido sem criar identidade, conta sem empresa completando onboarding, login/reload/logout, login legado, cadastro novo e retomada de identidade existente com senha comprovada. Build da raiz também passou.
