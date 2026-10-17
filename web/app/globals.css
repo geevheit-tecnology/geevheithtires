@@ -256,7 +256,6 @@ p {
   color: var(--ink);
   border-radius: 13px;
   box-shadow: 0 30px 80px #0004;
-  transform: rotate(1deg);
   border: 1px solid #ffffff40;
   overflow: hidden;
 }

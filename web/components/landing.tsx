@@ -451,7 +451,7 @@ export default function Home() {
       </main>
       <footer className="container footer">
         <Brand />
-        <span>© {new Date().getFullYear()} GeevheitTire</span>
+        <span>Desenvolvido por 2026@ Geevheit Software Solution</span>
         <Link href="/login">
           Acessar minha conta <ArrowUpRight size={14} />
         </Link>
