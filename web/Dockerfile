@@ -10,6 +10,7 @@ WORKDIR /workspace
 ENV NODE_ENV=production HOSTNAME=0.0.0.0
 COPY --from=build /workspace/.next/standalone ./
 COPY --from=build /workspace/.next/static ./.next/static
+COPY --from=build /workspace/public ./public
 USER node
 EXPOSE 3000
 CMD ["node","server.js"]
