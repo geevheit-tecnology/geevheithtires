@@ -328,12 +328,14 @@ class _VehiclesState extends ConsumerState<VehiclesPage> {
     body: FutureBuilder<List<dynamic>>(
       future: data,
       builder: (c, s) {
-        if (s.connectionState != ConnectionState.done)
+        if (s.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
-        if (s.hasError)
+        }
+        if (s.hasError) {
           return ErrorView(text: message(s.error!), retry: reload);
+        }
         final list = s.data!;
-        if (list.isEmpty)
+        if (list.isEmpty) {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(30),
@@ -343,6 +345,7 @@ class _VehiclesState extends ConsumerState<VehiclesPage> {
               ),
             ),
           );
+        }
         return RefreshIndicator(
           onRefresh: () async {
             reload();
@@ -412,10 +415,12 @@ class _MapState extends ConsumerState<MapPage> {
     body: FutureBuilder<Map<String, dynamic>>(
       future: data,
       builder: (c, s) {
-        if (s.connectionState != ConnectionState.done)
+        if (s.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
-        if (s.hasError)
+        }
+        if (s.hasError) {
           return ErrorView(text: message(s.error!), retry: reload);
+        }
         final m = s.data!;
         final positions = List<String>.from(m['positions']);
         final tires = List<Map<String, dynamic>>.from(

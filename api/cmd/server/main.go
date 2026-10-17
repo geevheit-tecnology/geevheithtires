@@ -482,6 +482,9 @@ func (a *App) invite(w http.ResponseWriter, r *http.Request) {
 	u := identity{id(), c.Company, d.Name, d.Email, d.Role}
 	_, e = t.Exec(ctx, "insert into users(id,company_id,name,email,password_hash,role) values($1,$2,$3,$4,$5,$6)", u.ID, u.Company, u.Name, u.Email, passwordHash(randomToken()), u.Role)
 	if e != nil {
+		if commercialError(w, e) {
+			return
+		}
 		problem(w, 409, "E-mail já cadastrado.")
 		return
 	}
@@ -598,6 +601,9 @@ func (a *App) createVehicle(w http.ResponseWriter, r *http.Request) {
 	eid := id()
 	_, e = t.Exec(ctx, "insert into vehicles(id,company_id,plate,model,template_id,current_km) values($1,$2,$3,$4,$5,$6)", eid, c.Company, d.Plate, d.Model, d.Template, d.KM)
 	if e != nil {
+		if commercialError(w, e) {
+			return
+		}
 		problem(w, 409, "Placa já cadastrada ou dados inválidos.")
 		return
 	}
@@ -781,6 +787,7 @@ func main() {
 		}
 		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire"})
 	})
+	r.Post("/api/v1/webhooks/asaas", a.asaasWebhook)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			r.Use(a.rate)
@@ -796,6 +803,7 @@ func main() {
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(a.auth)
+			r.Use(a.billingGuard)
 			r.Get("/me", func(w http.ResponseWriter, r *http.Request) {
 				c := claims(r)
 				var u identity
@@ -812,6 +820,11 @@ func main() {
 				}
 				write(w, 200, u)
 			})
+			r.Get("/billing", a.billingStatus)
+			r.Post("/billing/checkout", a.checkout)
+			r.Get("/platform/me", a.platformMe)
+			r.Get("/platform", a.platformDashboard)
+			r.Post("/platform/change", a.platformChange)
 			r.Get("/dashboard", a.dashboard)
 			r.Get("/company", a.companyProfile)
 			r.Get("/{resource:vehicles|tires|alerts|users}", a.list)

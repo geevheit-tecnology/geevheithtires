@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Brand } from "./brand";
 import { api } from "./api";
+import BillingPanel from "./billing-panel";
 import { neonClient, neonEnabled } from "./neon-client";
 import { TireMap, Tire } from "./tire-map";
 type Vehicle = {
@@ -695,26 +696,7 @@ export default function Panel() {
               </section>
             </>
           )}
-          {tab === "plan" && (
-            <section className="surface plan-status">
-              <span className="label">SUA ASSINATURA</span>
-              <h2>Período de avaliação</h2>
-              <p>
-                Seu trial termina em{" "}
-                {dash
-                  ? new Date(dash.company.trial_ends_at).toLocaleDateString(
-                      "pt-BR",
-                    )
-                  : "—"}
-                .
-              </p>
-              <div className="info">
-                A contratação, os limites comerciais e os pagamentos Asaas serão
-                ativados na etapa de cobrança. Nenhuma cobrança foi gerada por
-                este painel.
-              </div>
-            </section>
-          )}
+          {tab === "plan" && <BillingPanel owner={user?.role === "owner"} />}
         </main>
       </div>
       {modal && (
