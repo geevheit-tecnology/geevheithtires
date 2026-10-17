@@ -7,6 +7,5 @@ node_modules/
 **/node_modules/
 **/.next/
 mobile/
-api/
 docs/
 infra/
