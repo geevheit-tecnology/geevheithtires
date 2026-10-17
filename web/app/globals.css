@@ -2026,3 +2026,16 @@ td small {
     animation: none !important;
   }
 }
+
+/* Company registry and postal address lookup */
+.company-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 12px; }
+.company-fields legend { font-size: 12px; font-weight: 700; padding: 0; margin-bottom: 14px; }
+.company-fields > label[for] { margin-bottom: -7px; }
+.lookup-row { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.lookup-row input { min-width: 0; flex: 1; }
+.lookup-button { flex-shrink: 0; padding: 10px 12px; border-radius: 7px; border: 1px solid var(--border, #d6dee9); background: var(--navy); color: #fff; font-size: 11px; cursor: pointer; }
+.lookup-button:disabled { opacity: .6; cursor: wait; }
+.lookup-result { display: grid; gap: 5px; padding: 12px; border-radius: 7px; background: #eef7f1; color: #205738; font-size: 12px; }
+.lookup-error { display: grid; gap: 5px; color: #a32b30; font-size: 12px; line-height: 1.5; }
+.address-pair { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px; }
+.address-pair label, .address-pair input, .address-pair select { min-width: 0; }

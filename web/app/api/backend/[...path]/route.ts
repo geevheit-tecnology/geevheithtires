@@ -12,6 +12,7 @@ async function proxy(
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const path = (await params).path.join("/");
+  const isPublic = publicPaths.has(path) || /^registration\/(?:cnpj\/[A-Z0-9]{14}|cep\/[0-9]{8})$/.test(path);
   if (!/^[a-zA-Z0-9\-/]+$/.test(path))
     return NextResponse.json({ title: "Caminho inválido." }, { status: 400 });
   if (req.method !== "GET") {
@@ -69,7 +70,7 @@ async function proxy(
     if (
       response.status === 401 &&
       refresh &&
-      !publicPaths.has(path) &&
+      !isPublic &&
       path !== "auth/logout"
     ) {
       const rr = await fetch(`${base}/api/v1/auth/refresh`, {

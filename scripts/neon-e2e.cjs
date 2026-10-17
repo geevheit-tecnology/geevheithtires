@@ -1,3 +1,4 @@
+// Use an isolated Neon branch and the local company-directory fixture for QA CNPJs.
 const {chromium}=require('playwright');
 const fs=require('fs');
 (async()=>{
@@ -18,7 +19,7 @@ const fs=require('fs');
  await page.goto(base+'/cadastro');
  const stamp=Date.now();console.log('PASS landing desktop/mobile, map and calculator');const email=`qa-neon-${stamp}@example.com`;
  const cnpjBase=(''+stamp).slice(-12).padStart(12,'0');let cnpj=cnpjBase;for(let n=12;n<14;n++){let weight=n-7,sum=0;for(let i=0;i<n;i++){sum+=Number(cnpj[i])*weight;if(--weight===1)weight=9;}let digit=11-sum%11;cnpj+=digit>=10?0:digit;}
- await page.getByLabel('Seu nome').fill('Gestor QA');await page.getByLabel('Nome da empresa').fill('Frota QA');await page.getByLabel('CNPJ').fill(cnpj);await page.getByLabel('E-mail',{exact:true}).fill(email);await page.getByLabel(/^Senha/).fill('senha-qa-12345');
+ await page.getByLabel('Seu nome').fill('Gestor QA');await page.getByLabel('Nome da empresa').fill('Frota QA');await page.getByLabel('CNPJ').fill(cnpj);await page.getByRole('button',{name:'Consultar CNPJ'}).click();await page.getByText('Situação cadastral: ATIVA',{exact:true}).waitFor();await page.getByLabel('E-mail',{exact:true}).fill(email);await page.getByLabel(/^Senha/).fill('senha-qa-12345');
  await page.getByRole('button',{name:'Criar conta e começar'}).click();await page.waitForURL('**/app');console.log('PASS authenticated navigation');await page.getByRole('heading',{name:'Olá, Gestor.'}).waitFor();
  const neonSession=await page.request.get(base+'/api/auth/get-session');const ns=await neonSession.json();if(!ns?.user?.id)throw Error('Neon session missing');console.log('PASS managed Neon session restored');await page.reload();await page.getByRole('heading',{name:'Olá, Gestor.'}).waitFor();await page.getByRole('button',{name:'Cadastre um veículo'}).click();await page.getByLabel('Placa',{exact:true}).fill('QAQ1A23');await page.getByLabel('Marca e modelo').fill('Volvo FH 540');await page.getByLabel('Odômetro atual').fill('120000');await page.getByRole('button',{name:'Salvar',exact:true}).click();await page.getByText('Cadastro salvo.').waitFor();
  console.log('PASS vehicle created');await page.getByRole('button',{name:'Adicione seus pneus'}).click();await page.getByLabel('Código',{exact:true}).fill('QA001');await page.getByLabel('Marca',{exact:true}).fill('Michelin');await page.getByLabel('Instalar em veículo').selectOption({label:'QAQ1A23 · Volvo FH 540'});await page.getByLabel(/^Posição/).selectOption('1EE');await page.getByRole('button',{name:'Salvar',exact:true}).click();await page.getByRole('button',{name:/QAQ1A23.*Volvo/}).click();

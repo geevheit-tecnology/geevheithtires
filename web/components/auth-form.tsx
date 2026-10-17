@@ -7,6 +7,7 @@ import { Brand } from "./brand";
 import { api } from "./api";
 import { neonClient, neonEnabled } from "./neon-client";
 import { validCNPJ } from "../lib/cnpj";
+import { CompanyFields } from "./company-fields";
 export function AuthForm({
   mode,
 }: {
@@ -38,12 +39,18 @@ export function AuthForm({
     setBusy(true);
     const form = new FormData(e.currentTarget);
     const data = Object.fromEntries(form);
+    const address: Record<string, FormDataEntryValue> = {};
+    for (const key of ["postal_code", "street", "number", "complement", "district", "city", "state"]) {
+      if (key in data) { address[key] = data[key]; delete data[key]; }
+    }
     try {
       if (companyDetails) {
         if (String(data.company || "").trim().length < 2)
           throw new Error("Informe o nome da empresa.");
         if (!validCNPJ(String(data.cnpj || "")))
           throw new Error("Informe um CNPJ válido para cadastrar sua empresa.");
+        const registry = await api(`registration/cnpj/${String(data.cnpj).toUpperCase().replace(/[./\s-]/g, "")}`);
+        if (!registry.active) throw new Error("O CNPJ não está com situação cadastral ativa. Confira os dados da empresa.");
       }
       if (neonEnabled && mode === "recover") {
         const result = await neonClient.requestPasswordReset({
@@ -95,7 +102,7 @@ export function AuthForm({
           managedSession = await api("auth/neon", {
             token: token.data.token,
             ...(companyDetails
-              ? { name: data.name, company: data.company, cnpj: data.cnpj }
+              ? { name: data.name, company: data.company, cnpj: data.cnpj, address }
               : {}),
           });
         }
@@ -104,7 +111,7 @@ export function AuthForm({
         managedSession ||
         (await api(
           `auth/${mode === "register" ? "register" : mode === "accept" ? "accept" : mode}`,
-          mode === "accept" ? { ...data, token: params.get("token") } : data,
+          mode === "accept" ? { ...data, token: params.get("token") } : companyDetails ? { ...data, address } : data,
         ));
       if (mode === "recover" || mode === "accept") {
         setMessage(out.message);
@@ -178,27 +185,7 @@ export function AuthForm({
                       minLength={2}
                     />
                   </label>
-                  <label>
-                    Nome da empresa
-                    <input
-                      name="company"
-                      autoComplete="organization"
-                      required
-                      minLength={2}
-                    />
-                  </label>
-                  <label>
-                    CNPJ
-                    <input
-                      name="cnpj"
-                      placeholder="00.000.000/0000-00"
-                      required
-                      inputMode="text"
-                      autoCapitalize="characters"
-                      maxLength={18}
-                    />
-                    <small>Informe o CNPJ válido da sua empresa.</small>
-                  </label>
+                  <CompanyFields disabled={busy} />
                 </>
               )}
               {mode !== "accept" && (

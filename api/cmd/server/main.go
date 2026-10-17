@@ -32,11 +32,12 @@ import (
 )
 
 type App struct {
-	db      *pgxpool.Pool
-	secret  []byte
-	url     string
-	mailKey string
-	limiter sync.Map
+	db        *pgxpool.Pool
+	secret    []byte
+	url       string
+	mailKey   string
+	directory *publicDirectory
+	limiter   sync.Map
 }
 type Claims struct {
 	Company string `json:"company_id"`
@@ -51,13 +52,14 @@ type identity struct {
 	Role    string `json:"role"`
 }
 type credentials struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Company  string `json:"company"`
-	CNPJ     string `json:"cnpj"`
-	Role     string `json:"role"`
-	Token    string `json:"token"`
+	Name     string          `json:"name"`
+	Email    string          `json:"email"`
+	Password string          `json:"password"`
+	Company  string          `json:"company"`
+	CNPJ     string          `json:"cnpj"`
+	Role     string          `json:"role"`
+	Token    string          `json:"token"`
+	Address  *companyAddress `json:"address,omitempty"`
 }
 type rateWindow struct {
 	sync.Mutex
@@ -255,6 +257,15 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	if e := checkedAddress(d.Address); e != nil {
+		directoryProblem(w, e)
+		return
+	}
+	registration, e := a.verifiedCompany(ctx, d.CNPJ)
+	if e != nil {
+		directoryProblem(w, e)
+		return
+	}
 	t, e := a.db.Begin(ctx)
 	if e != nil {
 		problem(w, 503, "Banco indisponível.")
@@ -266,7 +277,7 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		problem(w, 500, "Falha ao iniciar empresa.")
 		return
 	}
-	_, e = t.Exec(ctx, "insert into companies(id,name,cnpj) values($1,$2,$3)", u.Company, d.Company, d.CNPJ)
+	e = insertCompany(ctx, t, u.Company, d.Company, d.CNPJ, d.Address, registration)
 	if e == nil {
 		_, e = t.Exec(ctx, "insert into users(id,company_id,name,email,password_hash,role) values($1,$2,$3,$4,$5,'owner')", u.ID, u.Company, u.Name, u.Email, passwordHash(d.Password))
 	}
@@ -760,7 +771,7 @@ func main() {
 		slog.Error("database unavailable", "error", e)
 		os.Exit(1)
 	}
-	a := &App{db: db, secret: []byte(secret), url: env("APP_URL", "http://localhost:3000"), mailKey: os.Getenv("RESEND_API_KEY")}
+	a := &App{db: db, secret: []byte(secret), url: env("APP_URL", "http://localhost:3000"), mailKey: os.Getenv("RESEND_API_KEY"), directory: newPublicDirectory()}
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(30*time.Second))
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -780,6 +791,8 @@ func main() {
 			r.Post("/auth/logout", a.logout)
 			r.Post("/auth/recover", a.recover)
 			r.Post("/auth/accept", a.accept)
+			r.Get("/registration/cnpj/{cnpj}", a.lookupCNPJ)
+			r.Get("/registration/cep/{cep}", a.lookupCEP)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(a.auth)
@@ -800,6 +813,7 @@ func main() {
 				write(w, 200, u)
 			})
 			r.Get("/dashboard", a.dashboard)
+			r.Get("/company", a.companyProfile)
 			r.Get("/{resource:vehicles|tires|alerts|users}", a.list)
 			r.Post("/vehicles", a.createVehicle)
 			r.Post("/tires", a.createTire)

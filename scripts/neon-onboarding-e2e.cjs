@@ -20,6 +20,28 @@ function cnpj(seed) {
   return value;
 }
 
+
+async function manualAddress(page) {
+  await page.getByLabel("CEP", { exact: true }).fill("01001000");
+  await page.getByLabel("Rua / logradouro").fill("Praça da Sé");
+  await page.getByLabel("Número", { exact: true }).fill("10");
+  await page.getByLabel("Bairro", { exact: true }).fill("Sé");
+  await page.getByLabel("Cidade", { exact: true }).fill("São Paulo");
+  await page.getByLabel("Estado / UF").selectOption("SP");
+}
+async function registryAddress(page) {
+  await page.getByRole("button", { name: "Consultar CNPJ" }).click();
+  await page.getByText("Situação cadastral: ATIVA", { exact: true }).waitFor();
+  assert.equal(await page.getByLabel("Estado / UF").inputValue(), "SP");
+  await page.getByLabel("Complemento", { exact: true }).fill("Sala 2");
+  await page.getByLabel("CEP", { exact: true }).fill("20040002");
+  await page.getByLabel("CEP", { exact: true }).press("Tab");
+  await page.waitForFunction(() => document.querySelector('[name="state"]').value === "RJ");
+  assert.equal(await page.getByLabel("Cidade", { exact: true }).inputValue(), "Rio de Janeiro");
+  assert.equal(await page.getByLabel("Número", { exact: true }).inputValue(), "10");
+  assert.equal(await page.getByLabel("Complemento", { exact: true }).inputValue(), "Sala 2");
+}
+
 (async () => {
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {
@@ -34,6 +56,7 @@ function cnpj(seed) {
     await page.getByLabel("Seu nome").fill("Gestor QA");
     await page.getByLabel("Nome da empresa").fill("Frota QA incompleta");
     await page.getByLabel(/^CNPJ/).fill("00000000000000");
+    await manualAddress(page);
     await page.getByLabel("E-mail", { exact: true }).fill(email);
     await page.getByLabel(/^Senha/).fill(password);
     await page.getByRole("button", { name: "Criar conta e começar" }).click();
@@ -55,6 +78,7 @@ function cnpj(seed) {
     await page.getByLabel("Seu nome").fill("Gestor QA");
     await page.getByLabel("Nome da empresa").fill("Frota QA recuperada");
     await page.getByLabel(/^CNPJ/).fill(cnpj(stamp));
+    await registryAddress(page);
     await page.getByRole("button", { name: "Concluir cadastro e entrar" }).click();
     await page.waitForURL("**/app");
     await page.getByRole("heading", { name: "Olá, Gestor." }).waitFor();
@@ -63,6 +87,15 @@ function cnpj(seed) {
     const owner = await me.json();
     assert.equal(owner.role, "owner");
     assert.ok(owner.company_id);
+    const profile = await page.request.get(base + "/api/backend/company");
+    assert.equal(profile.status(), 200);
+    const saved = await profile.json();
+    assert.equal(saved.address.state, "RJ");
+    assert.equal(saved.address.postal_code, "20040002");
+    assert.equal(saved.address.complement, "Sala 2");
+    assert.equal(saved.cnpj_status, 2);
+    assert.ok(saved.cnpj_verified_at);
+    console.log("PASS CNPJ lookup and CEP autofill persist verified company data and address");
     console.log("PASS unlinked Neon identity completes company onboarding and receives protected access");
     await page.reload();
     await page.getByRole("heading", { name: "Olá, Gestor." }).waitFor();
@@ -97,6 +130,7 @@ function cnpj(seed) {
     await page.getByLabel("Seu nome").fill("Gestor QA");
     await page.getByLabel("Nome da empresa").fill("Frota QA nova");
     await page.getByLabel(/^CNPJ/).fill(cnpj(stamp + 2));
+    await registryAddress(page);
     await page.getByLabel("E-mail", { exact: true }).fill(`qa-new-${stamp}@example.com`);
     await page.getByLabel(/^Senha/).fill(password);
     await page.getByRole("button", { name: "Criar conta e começar" }).click();
@@ -114,6 +148,7 @@ function cnpj(seed) {
     await page.getByLabel("Seu nome").fill("Gestor QA");
     await page.getByLabel("Nome da empresa").fill("Frota QA retomada");
     await page.getByLabel(/^CNPJ/).fill(cnpj(stamp + 3));
+    await registryAddress(page);
     await page.getByLabel("E-mail", { exact: true }).fill(pendingEmail);
     await page.getByLabel(/^Senha/).fill(password);
     await page.getByRole("button", { name: "Criar conta e começar" }).click();

@@ -168,10 +168,19 @@ func (a *App) neonSession(w http.ResponseWriter, r *http.Request) {
 		if len(name) < 2 {
 			name = "Gestor"
 		}
+		if e := checkedAddress(d.Address); e != nil {
+			directoryProblem(w, e)
+			return
+		}
+		registration, e := a.verifiedCompany(ctx, d.CNPJ)
+		if e != nil {
+			directoryProblem(w, e)
+			return
+		}
 		u = identity{id(), id(), name, email, "owner"}
 		_, e = t.Exec(ctx, "select set_config('app.company_id',$1,true)", u.Company)
 		if e == nil {
-			_, e = t.Exec(ctx, "insert into companies(id,name,cnpj) values($1,$2,$3)", u.Company, d.Company, d.CNPJ)
+			e = insertCompany(ctx, t, u.Company, d.Company, d.CNPJ, d.Address, registration)
 		}
 		if e == nil {
 			_, e = t.Exec(ctx, "insert into users(id,company_id,name,email,password_hash,role,neon_subject,email_verified_at) values($1,$2,$3,$4,$5,'owner',$6,case when $7 then now() else null end)", u.ID, u.Company, u.Name, u.Email, passwordHash(randomToken()), subject, c["emailVerified"] == true)

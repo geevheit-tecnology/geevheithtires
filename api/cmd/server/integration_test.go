@@ -30,7 +30,7 @@ func TestTenantFlow(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer admin.Close(ctx)
-	a := &App{db: db, secret: []byte("test-secret-with-at-least-32-characters"), url: "http://localhost:3000"}
+	a := &App{db: db, secret: []byte("test-secret-with-at-least-32-characters"), url: "http://localhost:3000", directory: fakeDirectory(t)}
 	r := chi.NewRouter()
 	r.Post("/register", a.register)
 	r.Post("/login", a.login)
@@ -53,6 +53,7 @@ func TestTenantFlow(t *testing.T) {
 			write(w, 200, map[string]int{"users": n})
 		})
 		r.Get("/dashboard", a.dashboard)
+		r.Get("/company", a.companyProfile)
 		r.Get("/{resource:vehicles|tires|users|alerts}", a.list)
 		r.Post("/vehicles", a.createVehicle)
 		r.Post("/tires", a.createTire)
@@ -125,11 +126,20 @@ func TestTenantFlow(t *testing.T) {
 	}()
 	tokens := []string{}
 	sessions := []map[string]any{}
-	for _, email := range emails {
-		s := request("POST", "/register", "", map[string]any{"name": "Gestor teste", "email": email, "password": "senha-segura-123", "company": "Frota de teste", "cnpj": cnpj()}, 201)
+	for i, email := range emails {
+		street := "Rua A"
+		if i == 1 {
+			street = "Rua B"
+		}
+		s := request("POST", "/register", "", map[string]any{"name": "Gestor teste", "email": email, "password": "senha-segura-123", "company": "Frota de teste", "cnpj": cnpj(), "address": companyAddress{PostalCode: "01001-000", Street: street, Number: "10", District: "Sé", City: "São Paulo", State: "sp"}}, 201)
 		sessions = append(sessions, s)
 		companies = append(companies, s["user"].(map[string]any)["company_id"].(string))
 		tokens = append(tokens, s["access_token"].(string))
+	}
+	request("GET", "/company", "", nil, 401)
+	profile := request("GET", "/company?company_id="+companies[1], tokens[0], nil, 200)
+	if profile["id"] != companies[0] || profile["legal_name"] != "Empresa QA LTDA" || profile["cnpj_verified_at"] == nil || profile["source"] != "BrasilAPI" || profile["address"].(map[string]any)["street"] != "Rua A" || profile["address"].(map[string]any)["state"] != "SP" {
+		t.Fatal("company verification/address persistence or tenant isolation failed")
 	}
 	request("POST", "/login", "", map[string]string{"email": emails[0], "password": "incorreta"}, 401)
 	request("POST", "/login", "", map[string]string{"email": emails[0], "password": "senha-segura-123"}, 200)
