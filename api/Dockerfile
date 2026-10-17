@@ -8,6 +8,7 @@ FROM alpine:3.23
 RUN apk add --no-cache ca-certificates && adduser -D app
 WORKDIR /app
 COPY --from=build /out/ /app/
+COPY --chmod=755 start-render.sh /app/start-render.sh
 USER app
 EXPOSE 8080
 CMD ["/app/server"]

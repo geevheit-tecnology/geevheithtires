@@ -2,7 +2,7 @@
 
 Arquitetura: web Next.js na Vercel, API Go na Render Free, PostgreSQL e Auth no Neon existente.
 
-O arquivo `render.yaml` declara somente um Web Service com `plan: free`. Ele usa o Dockerfile existente da API, verifica `/health` e executa migrations antes de iniciar o servidor. Se a migration falhar, o servidor não inicia. O runner usa lock de banco para serializar migrations. O deploy automático está desligado nesta primeira configuração; não há banco Render nem disco contratado.
+O arquivo `render.yaml` declara somente um Web Service com `plan: free`. Ele usa o Dockerfile existente da API, verifica `/health` e executa migrations antes de iniciar o servidor pelo script `/app/start-render.sh`. Se a migration falhar, o servidor não inicia. O runner usa lock de banco para serializar migrations. O deploy automático está desligado nesta primeira configuração; não há banco Render nem disco contratado.
 
 ## Criar o serviço
 
@@ -20,8 +20,9 @@ O arquivo `render.yaml` declara somente um Web Service com `plan: free`. Ele usa
 
 Use conexão direta: a API aplica `SET ROLE` na sessão pgx. Não use a conexão pooled nesta implementação. Nunca exponha a conexão ao navegador.
 
-4. Crie o serviço. Aguarde build, migrations e estado Live. Anote a URL HTTPS atribuída pela Render; o subdomínio depende de disponibilidade.
-5. Valide `<URL-API>/health`: HTTP 200, `status: ok`. Depois conecte a web e teste cadastro, login, veículo, pneu, inspeção, logout e restauração da sessão pelo site público.
+4. Em **Settings → Docker Command**, confirme `/app/start-render.sh`. Se o serviço foi criado com o comando antigo contendo `&&`, substitua-o por esse caminho. Um deploy manual sozinho não altera a configuração antiga do serviço.
+5. Crie o serviço. Aguarde build, migrations e estado Live. Anote a URL HTTPS atribuída pela Render; o subdomínio depende de disponibilidade.
+6. Valide `<URL-API>/health`: HTTP 200, `status: ok`. Depois conecte a web e teste cadastro, login, veículo, pneu, inspeção, logout e restauração da sessão pelo site público.
 
 ## Conectar a Vercel
 

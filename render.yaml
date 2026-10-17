@@ -7,7 +7,7 @@ services:
     branch: feat/u0-geevheittire
     dockerfilePath: ./api/Dockerfile
     dockerContext: ./api
-    dockerCommand: /bin/sh -c '/app/migrate && exec /app/server'
+    dockerCommand: /app/start-render.sh
     healthCheckPath: /health
     autoDeployTrigger: "off"
     envVars:
