@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: geevheittire-api
+    runtime: docker
+    plan: free
+    repo: https://github.com/geevheit-tecnology/geevheithtires
+    branch: feat/u0-geevheittire
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    dockerCommand: /bin/sh -c '/app/migrate && exec /app/server'
+    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: NEON_AUTH_BASE_URL
+        sync: false
+      - key: NEON_AUTH_JWKS_URL
+        sync: false
