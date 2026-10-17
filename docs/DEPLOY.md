@@ -2,13 +2,13 @@
 
 ## Situação
 
-O usuário informou que ainda não possui Neon nem serviço de API. Os arquivos estão preparados; API, banco, domínio e entrega real de e-mail não devem ser considerados publicados.
+Neon PostgreSQL e Auth foram configurados e validados com a aplicação local. Veja [NEON.md](NEON.md) para comandos e evidências. A hospedagem pública da API e a entrega real de e-mail continuam pendentes.
 
 ## 1. PostgreSQL no Neon
 
 1. Crie um projeto exclusivo do GeevheitTire e um banco PostgreSQL.
-2. Guarde a conexão pooled em `DATABASE_URL` nos segredos do serviço da API. Use TLS (`sslmode=require`). Não coloque credenciais no Git.
-3. Execute `go run ./cmd/migrate` dentro de `api`, com `DATABASE_URL` carregado. Para migrations, prefira a conexão direta de administração; na API use a conexão pooled.
+2. Guarde a conexão direta em `DATABASE_URL` nos segredos do serviço da API. Use TLS (`sslmode=require`). Não coloque credenciais no Git.
+3. Execute `go run ./cmd/migrate` dentro de `api`, com `DATABASE_URL` carregado. Use conexão direta também na API: a implementação atual usa `SET ROLE` por sessão e não é compatível com pooling transacional.
 4. As migrations criam `geevheit_runtime`, sem login, superuser ou bypass de RLS, concedem membership ao usuário que migra e permissões mínimas nas tabelas. A API executa `SET ROLE geevheit_runtime` em cada conexão. Se usar usuário de conexão separado, conceda essa membership explicitamente.
 5. Execute os testes com `TEST_DATABASE_URL` em um branch Neon de testes, nunca no banco de produção com clientes ativos.
 6. Configure backups e faça um exercício de restore antes de receber clientes reais.

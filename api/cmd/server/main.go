@@ -22,7 +22,6 @@ import (
 	"syscall"
 	"time"
 
-	"geevheittire/api/internal/domain"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/golang-jwt/jwt/v5"
@@ -304,8 +303,18 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 	var u identity
 	var h string
-	e := a.db.QueryRow(r.Context(), "select id,company_id,name,email,role,password_hash from auth_find_user($1)", strings.ToLower(strings.TrimSpace(d.Email))).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role, &h)
-	if e != nil || !passwordOK(d.Password, h) {
+	var neonSubject *string
+	e := a.db.QueryRow(r.Context(), "select id,company_id,name,email,role,password_hash,neon_subject from auth_find_user($1)", strings.ToLower(strings.TrimSpace(d.Email))).Scan(&u.ID, &u.Company, &u.Name, &u.Email, &u.Role, &h, &neonSubject)
+	valid := false
+	if e == nil {
+		if neonSubject != nil {
+			providerID, err := neonPassword(r.Context(), u.Email, d.Password)
+			valid = err == nil && providerID == *neonSubject
+		} else {
+			valid = passwordOK(d.Password, h)
+		}
+	}
+	if !valid {
 		problem(w, 401, "E-mail ou senha inválidos.")
 		return
 	}
@@ -689,87 +698,6 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, 200, json.RawMessage(result))
 }
-func (a *App) inspect(w http.ResponseWriter, r *http.Request) {
-	c := claims(r)
-	if c.Role == "driver" {
-		problem(w, 403, "A inspeção técnica exige perfil autorizado.")
-		return
-	}
-	tid := chi.URLParam(r, "id")
-	var d struct {
-		Client   string  `json:"client_id"`
-		Tread    float64 `json:"tread_mm"`
-		Pressure float64 `json:"pressure_psi"`
-		Damage   bool    `json:"structural_damage"`
-	}
-	if !decode(w, r, &d) {
-		return
-	}
-	classification, e := domain.Classify(d.Tread, d.Damage)
-	if e != nil || uuid.Validate(d.Client) != nil || uuid.Validate(tid) != nil || d.Pressure < 0 || d.Pressure > 200 {
-		problem(w, 422, "Medições ou identificador inválidos.")
-		return
-	}
-	ctx := r.Context()
-	t, e := a.tx(r)
-	if e != nil {
-		problem(w, 503, "Banco indisponível.")
-		return
-	}
-	defer t.Rollback(ctx)
-	var found string
-	var previous []byte
-	e = t.QueryRow(ctx, "select tire_id,to_jsonb(i) from inspections i where company_id=$1 and client_id=$2", c.Company, d.Client).Scan(&found, &previous)
-	if e == nil {
-		if found != tid {
-			problem(w, 409, "Identificador já utilizado em outro pneu.")
-			return
-		}
-		var replay struct {
-			ID             string `json:"id"`
-			Status         string `json:"status"`
-			Level          int    `json:"level"`
-			Recommendation string `json:"recommendation"`
-		}
-		if json.Unmarshal(previous, &replay) != nil {
-			problem(w, 500, "Falha ao recuperar inspeção.")
-			return
-		}
-		write(w, 200, map[string]any{"id": replay.ID, "classification": domain.Classification{Status: replay.Status, Level: replay.Level, Recommendation: replay.Recommendation}, "replayed": true})
-		return
-	}
-	if !errors.Is(e, pgx.ErrNoRows) {
-		problem(w, 500, "Falha ao verificar inspeção.")
-		return
-	}
-	var active string
-	e = t.QueryRow(ctx, "select id from tires where id=$1 and company_id=$2 and deleted_at is null for update", tid, c.Company).Scan(&active)
-	if e != nil {
-		problem(w, 404, "Pneu não encontrado.")
-		return
-	}
-	eid := id()
-	_, e = t.Exec(ctx, "insert into inspections(id,company_id,tire_id,user_id,client_id,tread_mm,pressure_psi,structural_damage,status,level,recommendation) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)", eid, c.Company, tid, c.Subject, d.Client, d.Tread, d.Pressure, d.Damage, classification.Status, classification.Level, classification.Recommendation)
-	if e == nil {
-		_, e = t.Exec(ctx, "update tires set tread_mm=$1,structural_damage=$4,updated_at=now() where id=$2 and company_id=$3", d.Tread, tid, c.Company, d.Damage)
-	}
-	if e == nil && (classification.Status != "ok" || d.Pressure < 90 || d.Pressure > 120) {
-		msg := classification.Recommendation
-		if d.Pressure < 90 || d.Pressure > 120 {
-			msg += " Verifique a calibragem (referência inicial: 90–120 psi)."
-		}
-		severity := classification.Status
-		if severity == "ok" {
-			severity = "alerta"
-		}
-		_, e = t.Exec(ctx, "insert into alerts(id,company_id,tire_id,message,severity) values($1,$2,$3,$4,$5)", id(), c.Company, tid, msg, severity)
-	}
-	if e != nil || a.audit(ctx, t, c, "inspection", eid, d) != nil || t.Commit(ctx) != nil {
-		problem(w, 409, "Não foi possível salvar. Reenvie com o mesmo identificador.")
-		return
-	}
-	write(w, 201, map[string]any{"id": eid, "classification": classification})
-}
 func (a *App) history(w http.ResponseWriter, r *http.Request) {
 	tid := chi.URLParam(r, "id")
 	if uuid.Validate(tid) != nil {
@@ -847,6 +775,7 @@ func main() {
 			r.Use(a.rate)
 			r.Post("/auth/register", a.register)
 			r.Post("/auth/login", a.login)
+			r.Post("/auth/neon", a.neonSession)
 			r.Post("/auth/refresh", a.refresh)
 			r.Post("/auth/logout", a.logout)
 			r.Post("/auth/recover", a.recover)
@@ -877,6 +806,7 @@ func main() {
 			r.Post("/users/invite", a.invite)
 			r.Get("/vehicles/{id}/tire-map", a.tireMap)
 			r.Post("/tires/{id}/inspections", a.inspect)
+			r.Post("/checklists", a.checklist)
 			r.Get("/tires/{id}/history", a.history)
 			r.Patch("/alerts/{id}/read", a.readAlert)
 		})

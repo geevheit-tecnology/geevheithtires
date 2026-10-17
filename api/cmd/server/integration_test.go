@@ -58,6 +58,7 @@ func TestTenantFlow(t *testing.T) {
 		r.Post("/tires", a.createTire)
 		r.Get("/vehicles/{id}/tire-map", a.tireMap)
 		r.Post("/tires/{id}/inspections", a.inspect)
+		r.Post("/checklists", a.checklist)
 		r.Get("/tires/{id}/history", a.history)
 	})
 	request := func(method, path, token string, body any, want int) map[string]any {
@@ -112,7 +113,7 @@ func TestTenantFlow(t *testing.T) {
 	companies := []string{}
 	defer func() {
 		for _, cid := range companies {
-			for _, table := range []string{"audit_log", "alerts", "inspections", "tires", "vehicles", "refresh_tokens", "account_tokens", "users"} {
+			for _, table := range []string{"checklist_batches", "sync_log", "audit_log", "alerts", "inspections", "tires", "vehicles", "refresh_tokens", "account_tokens", "users"} {
 				if _, e := admin.Exec(ctx, "delete from "+table+" where company_id=$1", cid); e != nil {
 					t.Error(e)
 				}

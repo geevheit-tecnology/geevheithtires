@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 const publicPaths = new Set([
   "auth/register",
+  "auth/neon",
   "auth/login",
   "auth/recover",
   "auth/accept",

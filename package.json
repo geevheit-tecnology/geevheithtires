@@ -1,0 +1,16 @@
+{
+  "dependencies": {
+    "@neon/config": "^1.9.2",
+    "@neon/env": "^1.6.3"
+  },
+  "name": "geevheittire",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix web run build",
+    "dev": "npm --prefix web run dev --",
+    "start": "npm --prefix web run start --",
+    "api:neon": "node --env-file=.env.local scripts/api-neon.mjs",
+    "migrate:neon": "node --env-file=.env.local scripts/api-neon.mjs migrate",
+    "test:neon": "node --env-file=.env.local scripts/api-neon.mjs test"
+  }
+}

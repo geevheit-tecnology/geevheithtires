@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Brand } from "./brand";
 import { api } from "./api";
+import { neonClient, neonEnabled } from "./neon-client";
 import { TireMap, Tire } from "./tire-map";
 type Vehicle = {
   id: string;
@@ -213,6 +214,11 @@ export default function Panel() {
   }
   async function logout() {
     try {
+      if (neonEnabled) {
+        const out = await neonClient.signOut();
+        if (out.error)
+          throw new Error(out.error.message || "Falha ao sair da conta Neon.");
+      }
       await api("auth/logout", {});
       router.push("/login");
     } catch (e) {

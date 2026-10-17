@@ -15,7 +15,8 @@
 | Verificação, recuperação e convite | Código implementado; envio real depende de Resend/domínio |
 | Inspeção, histórico e alertas internos | Fatia inicial do P1 implementada |
 | Configuração de deploy | Docker Compose, Dockerfiles, Fly.io e guia Neon/Vercel |
-| API e banco em produção | Pendentes; usuário ainda não possui os serviços |
+| Neon PostgreSQL e Auth | Configurados no branch production; fluxo real validado localmente |
+| API publicada | Pendente de hospedagem; API conectada ao Neon em localhost:8097 |
 | Publicação nas lojas | Pendente |
 
 ## Limites desta entrega

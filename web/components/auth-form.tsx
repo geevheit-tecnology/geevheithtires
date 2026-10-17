@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { Brand } from "./brand";
 import { api } from "./api";
+import { neonClient, neonEnabled } from "./neon-client";
 export function AuthForm({
   mode,
 }: {
@@ -33,10 +34,64 @@ export function AuthForm({
     const form = new FormData(e.currentTarget);
     const data = Object.fromEntries(form);
     try {
-      const out = await api(
-        `auth/${mode === "register" ? "register" : mode === "accept" ? "accept" : mode}`,
-        mode === "accept" ? { ...data, token: params.get("token") } : data,
-      );
+      if (neonEnabled && mode === "recover") {
+        const result = await neonClient.requestPasswordReset({
+          email: String(data.email),
+          redirectTo: `${window.location.origin}/aceitar-convite?kind=neon-reset`,
+        });
+        if (result.error) throw new Error(result.error.message || "Não foi possível solicitar a recuperação.");
+        setMessage("Se o e-mail estiver cadastrado, você receberá instruções de recuperação.");
+        return;
+      }
+      if (neonEnabled && mode === "accept" && params.get("kind") === "neon-reset") {
+        const result = await neonClient.resetPassword({newPassword: String(data.password), token: params.get("token") || ""});
+        if (result.error) throw new Error(result.error.message || "Link inválido ou expirado.");
+        setMessage("Senha atualizada. Entre novamente.");
+        return;
+      }
+      let managedSession: unknown;
+      if (neonEnabled && (mode === "login" || mode === "register")) {
+        let result =
+          mode === "register"
+            ? await neonClient.signUp.email({
+                name: String(data.name),
+                email: String(data.email),
+                password: String(data.password),
+              })
+            : await neonClient.signIn.email({
+                email: String(data.email),
+                password: String(data.password),
+              });
+        // A failed company submission may leave an authenticated Neon identity.
+        // Prove the same credentials again before retrying company onboarding.
+        if (result.error && mode === "register") {
+          result = await neonClient.signIn.email({email: String(data.email), password: String(data.password)});
+        }
+        if (result.error) {
+          if (mode === "register")
+            throw new Error(
+              result.error.message || "Não foi possível criar a conta Neon.",
+            );
+        } else {
+          const token = await neonClient.token();
+          if (token.error || !token.data?.token)
+            throw new Error(
+              "Confirme seu e-mail ou entre novamente para continuar.",
+            );
+          managedSession = await api("auth/neon", {
+            token: token.data.token,
+            ...(mode === "register"
+              ? { name: data.name, company: data.company, cnpj: data.cnpj }
+              : {}),
+          });
+        }
+      }
+      const out =
+        managedSession ||
+        (await api(
+          `auth/${mode === "register" ? "register" : mode === "accept" ? "accept" : mode}`,
+          mode === "accept" ? { ...data, token: params.get("token") } : data,
+        ));
       if (mode === "recover" || mode === "accept") {
         setMessage(out.message);
       } else {
