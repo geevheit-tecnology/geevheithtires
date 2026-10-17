@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -39,6 +39,62 @@ const demo: Tire[] = positions.map((position, i) => ({
   status: i === 4 ? "critico" : i === 7 ? "alerta" : "ok",
 }));
 export default function Home() {
+  const landingRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const elements = Array.from(
+      landingRef.current?.querySelectorAll<HTMLElement>(
+        ".section-heading, .center-heading, .feature, .calculator, .plan, .faq > div, .cta",
+      ) || [],
+    );
+    const played = new WeakSet<Element>();
+    const animations = new Set<Animation>();
+    let observer: IntersectionObserver | undefined;
+    const configure = () => {
+      observer?.disconnect();
+      if (preference.matches) {
+        animations.forEach((animation) => animation.cancel());
+        animations.clear();
+        return;
+      }
+      if (!("IntersectionObserver" in window)) return;
+      observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting || played.has(entry.target)) return;
+            played.add(entry.target);
+            observer?.unobserve(entry.target);
+            const index = elements.indexOf(entry.target as HTMLElement);
+            const animation = entry.target.animate(
+              [
+                { opacity: 0, transform: "translate3d(0, 24px, 0)" },
+                { opacity: 1, transform: "translate3d(0, 0, 0)" },
+              ],
+              {
+                duration: 680,
+                delay: (index % 3) * 70,
+                easing: "cubic-bezier(.22,1,.36,1)",
+                fill: "backwards",
+              },
+            );
+            animations.add(animation);
+            animation.onfinish = () => animations.delete(animation);
+          });
+        },
+        { threshold: 0.12 },
+      );
+      elements.forEach((element) => {
+        if (!played.has(element)) observer?.observe(element);
+      });
+    };
+    configure();
+    preference.addEventListener("change", configure);
+    return () => {
+      observer?.disconnect();
+      preference.removeEventListener("change", configure);
+      animations.forEach((animation) => animation.cancel());
+    };
+  }, []);
   const [menu, setMenu] = useState(false);
   const [selected, setSelected] = useState<Tire>(demo[4]);
   const [fleet, setFleet] = useState(30);
@@ -83,7 +139,7 @@ export default function Home() {
           </div>
         </div>
       </header>
-      <main>
+      <main ref={landingRef}>
         <section className="hero">
           <div className="container hero-grid">
             <div className="hero-copy">
@@ -139,7 +195,10 @@ export default function Home() {
                   tires={demo}
                   onSelect={setSelected}
                 />
-                <div className={`preview-alert ${selected.status}`}>
+                <div
+                  key={selected.id}
+                  className={`preview-alert ${selected.status}`}
+                >
                   <Activity size={20} />
                   <div>
                     <b>
@@ -160,8 +219,7 @@ export default function Home() {
               </div>
               <div className="preview-bottom">
                 <span>
-                  <i className="dot ok" /> Uma visão completa, posição por
-                  posição
+                  <i className="dot ok" /> Toque nos pneus para explorar o mapa
                 </span>
                 <ScanLine size={17} />
               </div>
