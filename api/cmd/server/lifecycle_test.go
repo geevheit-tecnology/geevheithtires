@@ -224,6 +224,32 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 	if codes[201] != 1 || codes[409] != 1 {
 		t.Fatal(codes)
 	}
+	// A spare is carried by the vehicle but does not roll. Swaps account each tire separately.
+	spare := create("QA-SPARE", false)
+	move(spare, "INSTALL", map[string]any{"vehicle_id": v2, "position": "STEP1", "vehicle_km": 1000}, 201)
+	request("PATCH", "vehicles/"+v2+"/odometer", 0, map[string]any{"current_km": 25000}, 200)
+	if snapshot(spare)["total_tracked_km"] != float64(0) {
+		t.Fatal("spare accumulated road distance")
+	}
+	move(spare, "ROTATE", map[string]any{"source_km": 25000, "vehicle_id": v2, "position": "2EE", "vehicle_km": 25000}, 201)
+	request("PATCH", "vehicles/"+v2+"/odometer", 0, map[string]any{"current_km": 26000}, 200)
+	if snapshot(spare)["total_tracked_km"] != float64(1000) {
+		t.Fatal("former spare did not accumulate road distance")
+	}
+	move(spare, "ROTATE", map[string]any{"source_km": 26000, "vehicle_id": v2, "position": "STEP1", "vehicle_km": 26000}, 201)
+	request("PATCH", "vehicles/"+v2+"/odometer", 0, map[string]any{"current_km": 27000}, 200)
+	if snapshot(spare)["total_tracked_km"] != float64(1000) {
+		t.Fatal("tire kept accumulating while in spare position")
+	}
+	peer := x
+	if snapshot(y)["state"] == "INSTALADO" {
+		peer = y
+	}
+	move(spare, "ROTATE", map[string]any{"source_km": 27000, "vehicle_id": v2, "position": "1EE", "vehicle_km": 27000, "swap_tire_id": peer, "swap_version": snapshot(peer)["version"]}, 201)
+	request("PATCH", "vehicles/"+v2+"/odometer", 0, map[string]any{"current_km": 28000}, 200)
+	if snapshot(spare)["total_tracked_km"] != float64(2000) || snapshot(peer)["total_tracked_km"] != float64(26000) {
+		t.Fatal("spare/road swap mixed tracked mileage")
+	}
 	// Movements are append-only for the runtime role.
 	tx, err := db.Begin(ctx)
 	if err != nil {

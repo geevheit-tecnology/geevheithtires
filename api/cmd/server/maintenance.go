@@ -21,7 +21,7 @@ func (a *App) refreshMaintenance(ctx context.Context, t pgx.Tx, company string) 
 		return e
 	}
 	rows, e := t.Query(ctx, `select t.id,t.code,t.size,t.state,t.tread_mm,t.structural_damage,t.retread_count,
- t.tracked_km+case when t.vehicle_id is not null then greatest(0,v.current_km-t.mounted_at_km) else 0 end-t.rotation_baseline_km,
+ t.tracked_km+case when t.vehicle_id is not null and t.position not like 'STEP%' then greatest(0,v.current_km-t.mounted_at_km) else 0 end-t.rotation_baseline_km,
  coalesce(t.latest_inspected_at,t.measurement_cycle_at,t.created_at),i.pressure_psi,i.temperature_c
  from tires t left join vehicles v on v.company_id=t.company_id and v.id=t.vehicle_id
  left join lateral(select pressure_psi,temperature_c from inspections where company_id=t.company_id and tire_id=t.id and inspected_at>=t.measurement_cycle_at order by inspected_at desc,id desc limit 1) i on true

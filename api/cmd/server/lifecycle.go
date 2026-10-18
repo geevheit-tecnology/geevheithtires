@@ -148,6 +148,10 @@ func event(ctx context.Context, t pgx.Tx, c *Claims, before, after tireSnapshot,
 	_, e := t.Exec(ctx, `insert into tire_movements(id,company_id,tire_id,actor_id,client_id,action,from_state,to_state,from_vehicle_id,from_position,to_vehicle_id,to_position,source_km,destination_km,tracked_km,stock_location,reason,supplier,cost_cents,tread_mm) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`, id(), c.Company, after.ID, actor, operation, action, before.State, after.State, before.Vehicle, before.Position, after.Vehicle, after.Position, source, dest, after.KM, after.Location, reason, supplier, cost, after.Tread)
 	return e
 }
+func rollingTire(s tireSnapshot) bool {
+	return s.Vehicle != nil && s.Position != nil && !strings.HasPrefix(*s.Position, "STEP")
+}
+
 func saveTire(ctx context.Context, t pgx.Tx, company string, s tireSnapshot) error {
 	_, e := t.Exec(ctx, `update tires set state=$3,vehicle_id=$4,position=$5,mounted_at_km=$6,tracked_km=$7,rotation_baseline_km=$8,retread_count=$9,tread_mm=$10,stock_location=$11,version=version+1,updated_at=now() where company_id=$1 and id=$2`, company, s.ID, s.State, s.Vehicle, s.Position, s.Mounted, s.KM, s.Rotation, s.Retreads, s.Tread, s.Location)
 	return e
@@ -236,7 +240,9 @@ func (a *App) moveTire(w http.ResponseWriter, r *http.Request) {
 			problem(w, 422, "Odômetro incompatível com a instalação.")
 			return
 		}
-		after.KM += int64(n - *before.Mounted)
+		if rollingTire(before) {
+			after.KM += int64(n - *before.Mounted)
+		}
 	}
 	installedAction := d.Action == "INSTALL" || d.Action == "TRANSFER" || d.Action == "ROTATE"
 	if installedAction {
@@ -300,7 +306,9 @@ func (a *App) moveTire(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			peerAfter := peer
-			peerAfter.KM += int64(*dest - *peer.Mounted)
+			if rollingTire(peer) {
+				peerAfter.KM += int64(*dest - *peer.Mounted)
+			}
 			peerAfter.Vehicle = before.Vehicle
 			peerAfter.Position = before.Position
 			peerAfter.Mounted = source
@@ -432,7 +440,7 @@ func (a *App) tireLifecycle(w http.ResponseWriter, r *http.Request) {
 	defer t.Rollback(r.Context())
 	ctx := r.Context()
 	var summary json.RawMessage
-	e = t.QueryRow(ctx, `select to_jsonb(t)||jsonb_build_object('plate',v.plate,'current_vehicle_km',v.current_km,'total_tracked_km',t.tracked_km+case when t.vehicle_id is not null then greatest(0,v.current_km-t.mounted_at_km) else 0 end,'movement_cost_cents',coalesce((select sum(cost_cents) from tire_movements m where m.company_id=t.company_id and m.tire_id=t.id),0)) from tires t left join vehicles v on v.company_id=t.company_id and v.id=t.vehicle_id where t.company_id=$1 and t.id=$2 and t.deleted_at is null`, claims(r).Company, tid).Scan(&summary)
+	e = t.QueryRow(ctx, `select to_jsonb(t)||jsonb_build_object('plate',v.plate,'current_vehicle_km',v.current_km,'total_tracked_km',t.tracked_km+case when t.vehicle_id is not null and t.position not like 'STEP%' then greatest(0,v.current_km-t.mounted_at_km) else 0 end,'movement_cost_cents',coalesce((select sum(cost_cents) from tire_movements m where m.company_id=t.company_id and m.tire_id=t.id),0)) from tires t left join vehicles v on v.company_id=t.company_id and v.id=t.vehicle_id where t.company_id=$1 and t.id=$2 and t.deleted_at is null`, claims(r).Company, tid).Scan(&summary)
 	if e != nil {
 		problem(w, 404, "Pneu não encontrado.")
 		return

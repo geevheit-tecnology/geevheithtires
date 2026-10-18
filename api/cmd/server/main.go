@@ -815,7 +815,7 @@ func main() {
 			problem(w, 503, "Banco indisponível.")
 			return
 		}
-		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire"})
+		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire", "tire_lifecycle_revision": "2"})
 	})
 	r.Post("/api/v1/webhooks/asaas", a.asaasWebhook)
 	r.Route("/api/v1", func(r chi.Router) {

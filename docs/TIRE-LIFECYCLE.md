@@ -13,7 +13,7 @@ A tela **Pneus** reúne estoque, pneus instalados, recapagens e descartes. O dos
 
 Gestores e borracheiros podem movimentar; motoristas e inspetores não podem. Regras comerciais continuam valendo para alterações. A API valida empresa, posição, disponibilidade, versão, odômetros e condição do pneu. Reenvios da mesma operação são idempotentes e o histórico não pode ser editado pela role de execução da API.
 
-A quilometragem rastreada é acumulada ao retirar/mover o pneu, usando o odômetro de cada veículo. Enquanto instalado, o dossiê inclui o percurso desde a montagem atual. O odômetro pode ser atualizado na tela do veículo ou durante uma inspeção. Ele não pode retroceder. O sistema não estima percursos anteriores ao início do rastreamento.
+A quilometragem rastreada é acumulada ao retirar/mover o pneu, usando o odômetro de cada veículo. Enquanto instalado, o dossiê inclui o percurso desde a montagem atual. O odômetro pode ser atualizado na tela do veículo ou durante uma inspeção. Ele não pode retroceder. Um estepe não acumula quilômetros de rodagem enquanto permanece nas posições STEP; a contagem volta a avançar quando o pneu é instalado em uma posição de rodagem. O sistema não estima percursos anteriores ao início do rastreamento.
 
 ## Alertas automáticos
 
