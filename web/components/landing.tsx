@@ -304,8 +304,8 @@ export default function Home() {
                 guiada por dados.
               </h3>
               <p>
-                Ciclo de vida, CPK e inteligência fazem parte do roadmap. Comece
-                pela base: dados consistentes da sua frota.
+                Acompanhe estoque, movimentações e manutenção dos pneus. CPK e
+                inteligência seguem no roadmap.
               </p>
               <a href="#planos">
                 Ver os planos previstos <ArrowUpRight size={18} />
@@ -397,8 +397,9 @@ export default function Home() {
                 items: [
                   "Até 15 veículos",
                   "3 usuários",
+                  "Estoque e ciclo de vida",
                   "Mapa de pneus e inspeções",
-                  "Alertas por regra",
+                  "Alertas automáticos",
                 ],
               },
               {
@@ -407,8 +408,8 @@ export default function Home() {
                 desc: "Mais profundidade para sua operação.",
                 items: [
                   "Até 60 veículos e 10 usuários",
-                  "Ciclo de vida e CPK (roadmap)",
-                  "IA e relatórios (roadmap)",
+                  "Gestão de estoque e ciclo de vida",
+                  "CPK, IA e relatórios (roadmap)",
                   "Até 3 filiais (roadmap)",
                 ],
               },
@@ -480,7 +481,7 @@ export default function Home() {
               ],
               [
                 "Todos os recursos dos planos já estão disponíveis?",
-                "Não. Esta é a fundação do produto. Recursos marcados como roadmap, cobrança e modo offline completo serão entregues nas etapas seguintes.",
+                "Estoque, ciclo de vida, inspeções e alertas internos estão disponíveis na web. Cobrança, recursos marcados como roadmap e modo offline completo continuam previstos para as próximas etapas.",
               ],
             ].map(([q, a]) => (
               <details key={q}>

@@ -9,7 +9,8 @@ Gestão de pneus para transportadoras, em pt-BR. Monorepo Go + PostgreSQL, Next.
 - Login com Argon2id, JWT de 15 minutos e refresh token rotativo de 30 dias, armazenado como hash.
 - Web usa um proxy de mesma origem e cookies `httpOnly`, `Secure` em produção e `SameSite=Lax`. Tokens não são expostos ao JavaScript do navegador.
 - Flutter usa Dio, Riverpod, go_router e armazenamento seguro para o refresh token.
-- Veículos, pneus, instalação inicial por posição e mapas de cavalo 6x2 e carreta de 3 eixos.
+- Veículos, pneus e mapas de cavalo 6x2 e carreta de 3 eixos.
+- Estoque, movimentações, rodízio, recapagem, descarte e histórico com custos na web/PWA e API; detalhes em [ciclo de vida](docs/TIRE-LIFECYCLE.md). As telas desses novos fluxos ainda não foram portadas para Flutter.
 - Inspeções técnicas, histórico, classificação determinística e alertas internos; idempotência por empresa e `client_id`.
 - Convites por e-mail para borracheiro/inspetor, verificação e redefinição de senha (exigem Resend configurado).
 - PostgreSQL com UUID v7, constraints por empresa, auditoria e RLS. A API assume uma role sem `SUPERUSER` nem `BYPASSRLS`.
