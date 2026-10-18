@@ -40,7 +40,7 @@ func (a *App) billingGuard(next http.Handler) http.Handler {
 		}
 		defer t.Rollback(r.Context())
 		var allowed bool
-		e = t.QueryRow(r.Context(), `select not s.suspended and (s.paid_until>now() or c.trial_ends_at>now()) from subscriptions s join companies c on c.id=s.company_id where c.id=$1 and c.deleted_at is null`, claims(r).Company).Scan(&allowed)
+		e = t.QueryRow(r.Context(), `select not s.suspended and (coalesce(s.paid_until>now(),false) or c.trial_ends_at>now()) from subscriptions s join companies c on c.id=s.company_id where c.id=$1 and c.deleted_at is null`, claims(r).Company).Scan(&allowed)
 		if e != nil {
 			problem(w, 503, "Não foi possível consultar a assinatura.")
 			return
@@ -49,6 +49,8 @@ func (a *App) billingGuard(next http.Handler) http.Handler {
 			problem(w, 402, "Acesso somente para consulta. Abra Plano e cobrança para regularizar sua assinatura.")
 			return
 		}
+		// Release this read transaction before the handler acquires its own connection.
+		_ = t.Rollback(r.Context())
 		next.ServeHTTP(w, r)
 	})
 }
@@ -136,6 +138,9 @@ type asaasClient struct {
 }
 
 func asaasFromEnv() *asaasClient {
+	if os.Getenv("BILLING_PAYMENTS_ENABLED") != "true" {
+		return nil
+	}
 	mode := os.Getenv("ASAAS_ENVIRONMENT")
 	key := os.Getenv("ASAAS_API_KEY")
 	if key == "" || len(os.Getenv("ASAAS_WEBHOOK_TOKEN")) < 32 {

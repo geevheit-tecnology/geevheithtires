@@ -114,7 +114,7 @@ func TestTenantFlow(t *testing.T) {
 	companies := []string{}
 	defer func() {
 		for _, cid := range companies {
-			for _, table := range []string{"checklist_batches", "sync_log", "audit_log", "alerts", "inspections", "tires", "vehicles", "refresh_tokens", "account_tokens", "users"} {
+			for _, table := range []string{"tire_operations", "tire_movements", "tire_policies", "checklist_batches", "sync_log", "audit_log", "alerts", "inspections", "tires", "vehicles", "refresh_tokens", "account_tokens", "users", "billing_invoices", "subscriptions"} {
 				if _, e := admin.Exec(ctx, "delete from "+table+" where company_id=$1", cid); e != nil {
 					t.Error(e)
 				}
@@ -164,8 +164,9 @@ func TestTenantFlow(t *testing.T) {
 	if createdInspection["id"] != replayedInspection["id"] || createdInspection["classification"].(map[string]any)["recommendation"] != replayedInspection["classification"].(map[string]any)["recommendation"] {
 		t.Fatal("inspection replay changed the response contract")
 	}
+	// Independent rules: structural wear, disposal evaluation, pressure and low stock.
 	d := request("GET", "/dashboard", tokens[0], nil, 200)
-	if d["critical"].(float64) != 1 || d["alerts"].(float64) != 1 {
+	if d["critical"].(float64) != 1 || d["alerts"].(float64) != 4 {
 		t.Fatalf("unexpected dashboard %+v", d)
 	}
 	m := request("GET", "/vehicles/"+vehicle+"/tire-map", tokens[0], nil, 200)

@@ -8,6 +8,9 @@ export type Tire = {
   brand?: string;
   size?: string;
   state?: string;
+  vehicle_id?: string;
+  version?: number;
+  stock_location?: string;
 };
 export function TireMap({
   positions,

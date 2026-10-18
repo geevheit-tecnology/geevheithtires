@@ -65,6 +65,9 @@ func validInspection(d inspectionInput) error {
 }
 func (a *App) saveInspection(ctx context.Context, t pgx.Tx, c *Claims, d inspectionInput, vehicle string) (inspectionResult, error) {
 	out := inspectionResult{Client: d.Client}
+	if e := fleetLock(ctx, t, c.Company); e != nil {
+		return out, e
+	}
 	if e := validInspection(d); e != nil {
 		return out, e
 	}
@@ -87,7 +90,9 @@ func (a *App) saveInspection(ctx context.Context, t pgx.Tx, c *Claims, d inspect
 	}
 	var latest *time.Time
 	var assigned *string
-	e = t.QueryRow(ctx, "select latest_inspected_at,vehicle_id from tires where id=$1 and company_id=$2 and deleted_at is null for update", d.Tire, c.Company).Scan(&latest, &assigned)
+	var cycle time.Time
+	var state string
+	e = t.QueryRow(ctx, "select latest_inspected_at,vehicle_id,measurement_cycle_at,state from tires where id=$1 and company_id=$2 and deleted_at is null for update", d.Tire, c.Company).Scan(&latest, &assigned, &cycle, &state)
 	if e != nil {
 		if errors.Is(e, pgx.ErrNoRows) {
 			return out, failure(404, "Pneu não encontrado.")
@@ -101,8 +106,12 @@ func (a *App) saveInspection(ctx context.Context, t pgx.Tx, c *Claims, d inspect
 	if d.InspectedAt != nil {
 		at = d.InspectedAt.UTC()
 	}
-	out.Applied = latest == nil || at.After(*latest)
-	out.Classification, _ = domain.Classify(d.Tread, d.Damage)
+	out.Applied = state != "DESCARTADO" && state != "EM_RECAPAGEM" && (latest == nil || at.After(*latest)) && !at.Before(cycle)
+	p, err := policy(ctx, t, c.Company)
+	if err != nil {
+		return out, err
+	}
+	out.Classification, _ = domain.ClassifyWithThresholds(d.Tread, d.Damage, p.Warning, p.Critical)
 	out.ID = id()
 	_, e = t.Exec(ctx, `insert into inspections(id,company_id,tire_id,user_id,client_id,tread_mm,pressure_psi,structural_damage,status,level,recommendation,inspected_at,vehicle_id,vehicle_km,temperature_c) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, out.ID, c.Company, d.Tire, c.Subject, d.Client, d.Tread, d.Pressure, d.Damage, out.Classification.Status, out.Classification.Level, out.Classification.Recommendation, at, assigned, d.VehicleKM, d.Temperature)
 	if e != nil {
@@ -111,7 +120,7 @@ func (a *App) saveInspection(ctx context.Context, t pgx.Tx, c *Claims, d inspect
 	outcome := "historical"
 	if out.Applied {
 		outcome = "applied"
-		_, e = t.Exec(ctx, "update tires set tread_mm=$1,structural_damage=$2,latest_inspected_at=$3,updated_at=now() where id=$4 and company_id=$5", d.Tread, d.Damage, at, d.Tire, c.Company)
+		_, e = t.Exec(ctx, "update tires set tread_mm=$1,structural_damage=$2,latest_inspected_at=$3,version=version+1,updated_at=now() where id=$4 and company_id=$5", d.Tread, d.Damage, at, d.Tire, c.Company)
 		if e != nil {
 			return out, e
 		}
@@ -121,25 +130,8 @@ func (a *App) saveInspection(ctx context.Context, t pgx.Tx, c *Claims, d inspect
 				return out, e
 			}
 		}
-		pressure := d.Pressure < 90 || d.Pressure > 120
-		hot := d.Temperature != nil && *d.Temperature >= 85
-		if out.Classification.Status != "ok" || pressure || hot {
-			severity := out.Classification.Status
-			msg := out.Classification.Recommendation
-			if pressure {
-				msg += " Pressão fora da referência inicial (90–120 psi)."
-				if severity == "ok" {
-					severity = "alerta"
-				}
-			}
-			if hot {
-				severity = "critico"
-				msg += " Temperatura elevada: verificar imediatamente."
-			}
-			_, e = t.Exec(ctx, "insert into alerts(id,company_id,tire_id,message,severity) values($1,$2,$3,$4,$5)", id(), c.Company, d.Tire, msg, severity)
-			if e != nil {
-				return out, e
-			}
+		if e = a.refreshMaintenance(ctx, t, c.Company); e != nil {
+			return out, e
 		}
 	}
 	_, e = t.Exec(ctx, "insert into sync_log(id,company_id,user_id,inspection_id,client_id,outcome,device_at) values($1,$2,$3,$4,$5,$6,$7)", id(), c.Company, c.Subject, out.ID, d.Client, outcome, at)

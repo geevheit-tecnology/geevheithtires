@@ -22,11 +22,13 @@
 
 ## Limites desta entrega
 
-- Trial é registrado por 14 dias; enforcement de planos, cobrança, inadimplência e bloqueio serão entregues no P5.
+- Trial de 14 dias com limites de veículos/usuários e modo de consulta após vencimento. Super Admin permite publicar planos, suspender/restaurar empresas e prorrogar avaliação com auditoria.
+- Pagamentos Asaas estão pausados por decisão do proprietário. O adaptador permanece preparado, com `BILLING_PAYMENTS_ENABLED=false` por padrão; cobrança automática e renovação recorrente não estão liberadas.
+- O acesso Super Admin depende de uma conta já cadastrada e concessão pelo comando operacional `api/cmd/platform-admin`; não é concedido automaticamente pelo e-mail ou pelo perfil owner da empresa.
 - Apenas os dois templates solicitados no U0; filiais, acoplamento e demais templates ficam no P3.
 - O aplicativo ainda não tem checklist offline, fotos, QR, push ou sincronização. São próximos itens do P1.
-- Sulco usa referências iniciais fixas (5/3 mm) e pressão usa faixa operacional inicial (90–120 psi); parametrização por empresa/tipo e temperatura ficam no P1.
-- Ciclo de vida, rodízio, recapagem, CPK, importação, integrações e relatórios ficam no P2.
+- Sulco, rodízio, inspeções vencidas, estoque mínimo e recapagens têm regras por empresa. Pressão usa a referência inicial 90–120 psi e temperatura usa aviso a partir de 85 °C; parametrização desses dois valores por aplicação ainda está pendente.
+- Estoque, ciclo de vida, rodízio, transferências, recapagem, descarte e alertas automáticos estão implementados para a web/PWA e API; veja [fluxos e limites](TIRE-LIFECYCLE.md). CPK, importação, integrações, relatórios e paridade dessas telas no Flutter continuam pendentes.
 - IA não foi integrada. Landing identifica esses recursos como roadmap.
 - Cadastro e instalação inicial estão disponíveis. Edição/exclusão não têm botões fictícios e serão ampliadas nas próximas etapas.
 - Sem Resend configurado não há entrega de e-mail. Em produção, verificação obrigatória, fila/outbox, retentativas e proteção contra abuso precisam ser concluídas antes de liberar onboarding público em escala.

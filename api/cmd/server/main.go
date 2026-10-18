@@ -538,8 +538,8 @@ func (a *App) list(w http.ResponseWriter, r *http.Request) {
 	resource := chi.URLParam(r, "resource")
 	queries := map[string]string{
 		"vehicles": "select to_jsonb(v) from vehicles v where company_id=$1 and deleted_at is null and ($2='' or id::text>$2) order by id limit 51",
-		"tires":    "select to_jsonb(v)||jsonb_build_object('status',case when structural_damage or tread_mm<3 then 'critico' when tread_mm<5 then 'alerta' else 'ok' end) from tires v where company_id=$1 and deleted_at is null and ($2='' or id::text>$2) order by id limit 51",
-		"alerts":   "select to_jsonb(v) from alerts v where company_id=$1 and ($2='' or id::text>$2) order by id limit 51",
+		"tires":    "select to_jsonb(v)||jsonb_build_object('status',case when structural_damage or tread_mm<coalesce((select critical_mm from tire_policies where company_id=$1),3) then 'critico' when tread_mm<coalesce((select warning_mm from tire_policies where company_id=$1),5) then 'alerta' else 'ok' end) from tires v where company_id=$1 and deleted_at is null and ($2='' or id::text>$2) order by id limit 51",
+		"alerts":   "select to_jsonb(v) from alerts v where company_id=$1 and resolved_at is null and ($2='' or id::text>$2) order by id limit 51",
 		"users":    "select jsonb_build_object('id',id,'name',name,'email',email,'role',role,'email_verified',email_verified_at is not null) from users where company_id=$1 and deleted_at is null and ($2='' or id::text>$2) order by id limit 51",
 	}
 	q, ok := queries[resource]
@@ -643,6 +643,11 @@ func (a *App) createTire(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer t.Rollback(ctx)
+	if e = fleetLock(ctx, t, c.Company); e != nil {
+		inspectionError(w, e)
+		return
+	}
+	var mounted any
 	var vid any
 	var pos any
 	state := "EM_ESTOQUE"
@@ -660,14 +665,36 @@ func (a *App) createTire(w http.ResponseWriter, r *http.Request) {
 		vid = d.Vehicle
 		pos = d.Position
 		state = "INSTALADO"
+		var km int
+		if e = t.QueryRow(ctx, "select current_km from vehicles where id=$1 and company_id=$2", d.Vehicle, c.Company).Scan(&km); e != nil {
+			inspectionError(w, e)
+			return
+		}
+		mounted = km
+		p, err := policy(ctx, t, c.Company)
+		if err != nil {
+			inspectionError(w, err)
+			return
+		}
+		if d.Tread < p.Critical {
+			problem(w, 422, "Pneu com sulco crítico deve permanecer fora de operação para avaliação.")
+			return
+		}
 	}
 	eid := id()
-	_, e = t.Exec(ctx, "insert into tires(id,company_id,code,brand,model,size,tread_mm,acquisition_cost,vehicle_id,position,state) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)", eid, c.Company, strings.ToUpper(d.Code), d.Brand, d.Model, d.Size, d.Tread, d.Cost, vid, pos, state)
+	_, e = t.Exec(ctx, "insert into tires(id,company_id,code,brand,model,size,tread_mm,acquisition_cost,vehicle_id,position,state,mounted_at_km) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", eid, c.Company, strings.ToUpper(d.Code), d.Brand, d.Model, d.Size, d.Tread, d.Cost, vid, pos, state, mounted)
 	if e != nil {
 		problem(w, 409, "Código já cadastrado ou posição ocupada.")
 		return
 	}
-	if a.audit(ctx, t, c, "tire", eid, d) != nil || t.Commit(ctx) != nil {
+	snapshot, err := loadTire(ctx, t, c.Company, eid)
+	if err == nil {
+		err = event(ctx, t, c, tireSnapshot{}, snapshot, "", "REGISTER", "Cadastro inicial do pneu.", "", 0, nil, snapshot.Mounted)
+	}
+	if err == nil {
+		err = a.refreshMaintenance(ctx, t, c.Company)
+	}
+	if err != nil || a.audit(ctx, t, c, "tire", eid, d) != nil || t.Commit(ctx) != nil {
 		problem(w, 500, "Falha ao salvar pneu.")
 		return
 	}
@@ -692,7 +719,7 @@ func (a *App) tireMap(w http.ResponseWriter, r *http.Request) {
 		problem(w, 404, "Veículo não encontrado.")
 		return
 	}
-	tires, e := rowsJSON(ctx, t, "select to_jsonb(t)||jsonb_build_object('status',case when structural_damage or tread_mm<3 then 'critico' when tread_mm<5 then 'alerta' else 'ok' end) from tires t where vehicle_id=$1 and company_id=$2 and deleted_at is null", vid, claims(r).Company)
+	tires, e := rowsJSON(ctx, t, "select to_jsonb(t)||jsonb_build_object('status',case when structural_damage or tread_mm<coalesce((select critical_mm from tire_policies where company_id=$2),3) then 'critico' when tread_mm<coalesce((select warning_mm from tire_policies where company_id=$2),5) then 'alerta' else 'ok' end) from tires t where vehicle_id=$1 and company_id=$2 and deleted_at is null", vid, claims(r).Company)
 	if e != nil {
 		problem(w, 500, "Falha ao carregar mapa.")
 		return
@@ -708,7 +735,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	defer t.Rollback(ctx)
 	var result []byte
-	e = t.QueryRow(ctx, `select jsonb_build_object('vehicles',(select count(*) from vehicles where company_id=$1 and deleted_at is null),'tires',(select count(*) from tires where company_id=$1 and deleted_at is null),'critical',(select count(*) from tires where company_id=$1 and (structural_damage or tread_mm<3) and deleted_at is null),'alerts',(select count(*) from alerts where company_id=$1 and not read),'company',(select jsonb_build_object('name',name,'status',status,'trial_ends_at',trial_ends_at) from companies where id=$1))`, claims(r).Company).Scan(&result)
+	e = t.QueryRow(ctx, `select jsonb_build_object('vehicles',(select count(*) from vehicles where company_id=$1 and deleted_at is null),'tires',(select count(*) from tires where company_id=$1 and deleted_at is null and state<>'DESCARTADO'),'critical',(select count(*) from tires where company_id=$1 and (structural_damage or tread_mm<coalesce((select critical_mm from tire_policies where company_id=$1),3)) and state in ('INSTALADO','EM_ESTOQUE') and deleted_at is null),'alerts',(select count(*) from alerts where company_id=$1 and not read and resolved_at is null),'company',(select jsonb_build_object('name',name,'status',status,'trial_ends_at',trial_ends_at) from companies where id=$1))`, claims(r).Company).Scan(&result)
 	if e != nil {
 		problem(w, 500, "Falha ao carregar indicadores.")
 		return
@@ -778,6 +805,9 @@ func main() {
 		os.Exit(1)
 	}
 	a := &App{db: db, secret: []byte(secret), url: env("APP_URL", "http://localhost:3000"), mailKey: os.Getenv("RESEND_API_KEY"), directory: newPublicDirectory()}
+	workerCtx, stopWorker := context.WithCancel(ctx)
+	defer stopWorker()
+	go a.maintenanceWorker(workerCtx)
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(30*time.Second))
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -830,6 +860,11 @@ func main() {
 			r.Get("/{resource:vehicles|tires|alerts|users}", a.list)
 			r.Post("/vehicles", a.createVehicle)
 			r.Post("/tires", a.createTire)
+			r.Post("/tires/{id}/movements", a.moveTire)
+			r.Get("/tires/{id}/lifecycle", a.tireLifecycle)
+			r.Get("/tire-policy", a.getTirePolicy)
+			r.Patch("/tire-policy", a.setTirePolicy)
+			r.Patch("/vehicles/{id}/odometer", a.updateOdometer)
 			r.Post("/users/invite", a.invite)
 			r.Get("/vehicles/{id}/tire-map", a.tireMap)
 			r.Post("/tires/{id}/inspections", a.inspect)

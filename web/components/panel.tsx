@@ -18,6 +18,8 @@ import {
 import { Brand } from "./brand";
 import { api } from "./api";
 import BillingPanel from "./billing-panel";
+import TireInventory from "./tire-inventory";
+import VehicleOdometer from "./vehicle-odometer";
 import { neonClient, neonEnabled } from "./neon-client";
 import { TireMap, Tire } from "./tire-map";
 type Vehicle = {
@@ -151,6 +153,10 @@ export default function Panel() {
   useEffect(() => {
     void load();
   }, []);
+  useEffect(()=>{
+    const timer=setInterval(()=>{if(document.visibilityState!=="visible")return;void Promise.all([api("dashboard"),all("alerts")]).then(([d,a])=>{setDash(d);setAlerts(a)}).catch(()=>{})},60000);
+    return()=>clearInterval(timer);
+  },[]);
   async function openMap(v: Vehicle) {
     setError("");
     try {
@@ -194,6 +200,7 @@ export default function Panel() {
       data.pressure_psi = Number(data.pressure_psi);
       data.structural_damage = data.structural_damage === "on";
       data.client_id = inspectionClient;
+      if(data.vehicle_km!==undefined && data.vehicle_km!=="") data.vehicle_km=Number(data.vehicle_km); else delete data.vehicle_km;
     }
     try {
       const out = await api(endpoint, data);
@@ -462,7 +469,7 @@ export default function Panel() {
                       <Shield />
                       <h3>Nenhum alerta pendente.</h3>
                       <p>
-                        Os alertas aparecem após as inspeções da sua equipe.
+                        Os alertas são gerados automaticamente a partir das regras, inspeções, movimentações e quilometragens registradas.
                       </p>
                     </div>
                   )}
@@ -528,6 +535,7 @@ export default function Panel() {
                         </div>
                         <span className="pill">Mapa de pneus</span>
                       </div>
+                      {(manage||user?.role==="tire_tech")&&<VehicleOdometer vehicle={map.vehicle} onChange={async()=>{await load();setMap(await api(`vehicles/${map.vehicle.id}/tire-map`))}}/>}
                       <TireMap
                         positions={map.positions}
                         tires={map.tires}
@@ -548,12 +556,7 @@ export default function Panel() {
           {tab === "tires" && (
             <>
               <div className="list-toolbar">
-                <input
-                  aria-label="Buscar pneus"
-                  placeholder="Buscar código, marca ou medida"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
+                <p>Estoque, movimentações e histórico de cada pneu.</p>
                 {manage && (
                   <button
                     className="button small"
@@ -564,61 +567,8 @@ export default function Panel() {
                   </button>
                 )}
               </div>
-              <section className="surface table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Pneu</th>
-                      <th>Marca / medida</th>
-                      <th>Sulco</th>
-                      <th>Posição</th>
-                      <th>Estado</th>
-                      <th>Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tires
-                      .filter((t) =>
-                        `${t.code} ${t.brand} ${t.size}`
-                          .toLowerCase()
-                          .includes(search.toLowerCase()),
-                      )
-                      .map((t) => (
-                        <tr key={t.id}>
-                          <td>
-                            <b>{t.code}</b>
-                          </td>
-                          <td>
-                            {t.brand}
-                            <small>{t.size}</small>
-                          </td>
-                          <td>
-                            <span className={`pill ${t.status}`}>
-                              {t.tread_mm} mm
-                            </span>
-                          </td>
-                          <td>{t.position || "Estoque"}</td>
-                          <td>{t.state?.replaceAll("_", " ")}</td>
-                          <td>
-                            {user?.role !== "driver" && (
-                              <button
-                                className="table-link"
-                                onClick={() => void select(t)}
-                              >
-                                Inspecionar →
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-                {!tires.length && (
-                  <div className="empty-state">
-                    Cadastre seu primeiro pneu para começar.
-                  </div>
-                )}
-              </section>
+              <TireInventory tires={tires} vehicles={vehicles} role={user?.role||""} onChange={load} onInspect={t=>void select(t)}/>
+
             </>
           )}
           {tab === "alerts" && (
@@ -949,6 +899,7 @@ export default function Panel() {
                       />
                     </label>
                   </div>
+                  {selected?.vehicle_id&&<label>Odômetro atual do veículo (km)<input name="vehicle_km" type="number" min={vehicles.find(v=>v.id===selected.vehicle_id)?.current_km||0} defaultValue={vehicles.find(v=>v.id===selected.vehicle_id)?.current_km||0}/></label>}
                   <label className="checkbox">
                     <input name="structural_damage" type="checkbox" />
                     Dano estrutural identificado

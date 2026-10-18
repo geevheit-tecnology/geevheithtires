@@ -34,6 +34,7 @@ func TestPaymentCents(t *testing.T) {
 	}
 }
 func TestPaymentsDefaultDisabled(t *testing.T) {
+	t.Setenv("BILLING_PAYMENTS_ENABLED", "false")
 	t.Setenv("ASAAS_API_KEY", "test")
 	t.Setenv("ASAAS_WEBHOOK_TOKEN", "unique-test-webhook-token-at-least-32")
 	t.Setenv("ASAAS_ENVIRONMENT", "production")
@@ -42,6 +43,10 @@ func TestPaymentsDefaultDisabled(t *testing.T) {
 		t.Fatal("live payments enabled without opt in")
 	}
 	t.Setenv("ASAAS_ENVIRONMENT", "sandbox")
+	if asaasFromEnv() != nil {
+		t.Fatal("payments enabled while billing is paused")
+	}
+	t.Setenv("BILLING_PAYMENTS_ENABLED", "true")
 	if asaasFromEnv() == nil {
 		t.Fatal("sandbox unavailable")
 	}
@@ -84,7 +89,17 @@ func TestBillingAndPlatformIsolation(t *testing.T) {
 	}
 	defer func() {
 		for _, c := range companies {
-			_, _ = admin.Exec(ctx, `delete from billing_events where payment_id in(select provider_id from billing_invoices where company_id=$1);delete from billing_invoices where company_id=$1;delete from vehicles where company_id=$1;delete from platform_audit where actor_id in(select id from users where company_id=$1);delete from platform_admins where user_id in(select id from users where company_id=$1);delete from users where company_id=$1;delete from subscriptions where company_id=$1;delete from companies where id=$1`, c)
+			for _, query := range []string{
+				"delete from billing_events where payment_id in(select provider_id from billing_invoices where company_id=$1)",
+				"delete from billing_invoices where company_id=$1", "delete from audit_log where company_id=$1", "delete from vehicles where company_id=$1",
+				"delete from platform_audit where actor_id in(select id from users where company_id=$1)",
+				"delete from platform_admins where user_id in(select id from users where company_id=$1)",
+				"delete from users where company_id=$1", "delete from subscriptions where company_id=$1", "delete from companies where id=$1",
+			} {
+				if _, err := admin.Exec(ctx, query, c); err != nil {
+					t.Error(err)
+				}
+			}
 		}
 	}()
 	r := chi.NewRouter()
