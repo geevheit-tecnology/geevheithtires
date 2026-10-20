@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"testing"
 )
 
@@ -55,6 +57,7 @@ func TestTenantFlow(t *testing.T) {
 		r.Get("/dashboard", a.dashboard)
 		r.Get("/company", a.companyProfile)
 		r.Get("/{resource:vehicles|tires|users|alerts}", a.list)
+		r.Get("/vehicle-configurations", a.vehicleConfigurations)
 		r.Post("/vehicles", a.createVehicle)
 		r.Post("/tires", a.createTire)
 		r.Get("/vehicles/{id}/tire-map", a.tireMap)
@@ -143,6 +146,33 @@ func TestTenantFlow(t *testing.T) {
 	}
 	request("POST", "/login", "", map[string]string{"email": emails[0], "password": "incorreta"}, 401)
 	request("POST", "/login", "", map[string]string{"email": emails[0], "password": "senha-segura-123"}, 200)
+	request("GET", "/vehicle-configurations", "", nil, 401)
+	catalog := request("GET", "/vehicle-configurations", tokens[0], nil, 200)["data"].([]any)
+	if len(catalog) < 18 {
+		t.Fatal("vehicle catalog is incomplete")
+	}
+	categories := map[string]bool{}
+	for i, raw := range catalog {
+		configuration := raw.(map[string]any)
+		categories[configuration["category"].(string)] = true
+		created := request("POST", "/vehicles", tokens[0], map[string]any{"plate": fmt.Sprintf("CFG%04d", i), "model": "Configuration QA", "template_id": configuration["id"]}, 201)
+		mapped := request("GET", "/vehicles/"+created["id"].(string)+"/tire-map", tokens[0], nil, 200)
+		if !reflect.DeepEqual(mapped["positions"], configuration["positions"]) {
+			t.Fatal("saved vehicle map differs from catalog", configuration["id"])
+		}
+		if _, err := admin.Exec(ctx, "select set_config('app.company_id',$1,false)", companies[0]); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := admin.Exec(ctx, "update vehicles set deleted_at=now() where id=$1", created["id"]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, category := range []string{"Cavalo mecânico", "Carreta", "Caminhão / truck", "VUC", "3/4", "Van", "Utilitário"} {
+		if !categories[category] {
+			t.Fatal("missing vehicle category", category)
+		}
+	}
+	request("POST", "/vehicles", tokens[0], map[string]any{"plate": "BAD1A23", "model": "Invalid configuration", "template_id": "unknown"}, 422)
 	vehicle := request("POST", "/vehicles", tokens[0], map[string]any{"plate": "ABC1D23", "model": "Volvo FH", "template_id": "tractor-6x2", "current_km": 125000}, 201)["id"].(string)
 	request("POST", "/vehicles", tokens[0], map[string]any{"plate": "ABC1D23", "model": "Volvo FH", "template_id": "tractor-6x2", "current_km": 0}, 409)
 	request("GET", "/vehicles/"+vehicle+"/tire-map", tokens[1], nil, 404)

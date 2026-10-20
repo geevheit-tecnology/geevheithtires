@@ -587,7 +587,7 @@ func (a *App) createVehicle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Plate = strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(d.Plate), "-", ""))
-	if !regexp.MustCompile(`^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$`).MatchString(d.Plate) || d.KM < 0 || len(d.Model) < 2 || (d.Template != "tractor-6x2" && d.Template != "trailer-3") {
+	if !regexp.MustCompile(`^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$`).MatchString(d.Plate) || d.KM < 0 || len(d.Model) < 2 || d.Template == "" {
 		problem(w, 422, "Verifique placa, modelo, odômetro e configuração de eixos.")
 		return
 	}
@@ -598,6 +598,15 @@ func (a *App) createVehicle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer t.Rollback(ctx)
+	var validTemplate bool
+	if e = t.QueryRow(ctx, "select exists(select 1 from axle_templates where id=$1)", d.Template).Scan(&validTemplate); e != nil {
+		problem(w, 503, "Não foi possível validar a configuração de eixos.")
+		return
+	}
+	if !validTemplate {
+		problem(w, 422, "Selecione uma configuração de eixos válida.")
+		return
+	}
 	eid := id()
 	_, e = t.Exec(ctx, "insert into vehicles(id,company_id,plate,model,template_id,current_km) values($1,$2,$3,$4,$5,$6)", eid, c.Company, d.Plate, d.Model, d.Template, d.KM)
 	if e != nil {
@@ -858,6 +867,7 @@ func main() {
 			r.Get("/dashboard", a.dashboard)
 			r.Get("/company", a.companyProfile)
 			r.Get("/{resource:vehicles|tires|alerts|users}", a.list)
+			r.Get("/vehicle-configurations", a.vehicleConfigurations)
 			r.Post("/vehicles", a.createVehicle)
 			r.Post("/tires", a.createTire)
 			r.Post("/tires/{id}/movements", a.moveTire)

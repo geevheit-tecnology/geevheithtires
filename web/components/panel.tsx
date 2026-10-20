@@ -19,6 +19,7 @@ import { Brand } from "./brand";
 import { api } from "./api";
 import BillingPanel from "./billing-panel";
 import TireInventory from "./tire-inventory";
+import VehicleConfigurationFields, { VehicleConfiguration } from "./vehicle-configuration-fields";
 import VehicleOdometer from "./vehicle-odometer";
 import { neonClient, neonEnabled } from "./neon-client";
 import { TireMap, Tire } from "./tire-map";
@@ -59,6 +60,7 @@ export default function Panel() {
   const [tab, setTab] = useState("dashboard");
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [configurations, setConfigurations] = useState<VehicleConfiguration[]>([]);
   const [tires, setTires] = useState<Tire[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -132,12 +134,14 @@ export default function Panel() {
     try {
       const u = await api("me");
       setUser(u);
-      const [d, v, t, a] = await Promise.all([
+      const [d, v, t, a, configurations] = await Promise.all([
         api("dashboard"),
         all("vehicles"),
         all("tires"),
         all("alerts"),
+        api("vehicle-configurations"),
       ]);
+      setConfigurations(configurations.data);
       setDash(d);
       setVehicles(v);
       setTires(t);
@@ -702,13 +706,7 @@ export default function Panel() {
                       minLength={2}
                     />
                   </label>
-                  <label>
-                    Configuração
-                    <select name="template_id">
-                      <option value="tractor-6x2">Cavalo mecânico 6x2</option>
-                      <option value="trailer-3">Carreta 3 eixos</option>
-                    </select>
-                  </label>
+                  <VehicleConfigurationFields configurations={configurations} />
                   <label>
                     Odômetro atual (km)
                     <input
@@ -792,37 +790,7 @@ export default function Panel() {
                           const v = vehicles.find(
                             (v) => v.id === e.target.value,
                           );
-                          const positions =
-                            v?.template_id === "tractor-6x2"
-                              ? [
-                                  "1EE",
-                                  "1DE",
-                                  "2EE",
-                                  "2EI",
-                                  "2DI",
-                                  "2DE",
-                                  "3EE",
-                                  "3EI",
-                                  "3DI",
-                                  "3DE",
-                                  "STEP1",
-                                ]
-                              : [
-                                  "1EE",
-                                  "1EI",
-                                  "1DI",
-                                  "1DE",
-                                  "2EE",
-                                  "2EI",
-                                  "2DI",
-                                  "2DE",
-                                  "3EE",
-                                  "3EI",
-                                  "3DI",
-                                  "3DE",
-                                  "STEP1",
-                                  "STEP2",
-                                ];
+                          const positions = configurations.find(c => c.id === v?.template_id)?.positions || [];
                           positions.forEach((p) => {
                             const o = document.createElement("option");
                             o.value = p;
