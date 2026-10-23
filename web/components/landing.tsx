@@ -385,15 +385,16 @@ export default function Home() {
             <div className="eyebrow dark">CRESÇA NO SEU RITMO</div>
             <h2>Um plano para cada jornada.</h2>
             <p>
-              Valores de referência. Os pagamentos serão liberados após a ativação.
-              Os recursos futuros estão identificados em cada plano.
+              Valores em definição. Os preços exibidos são provisórios e serão
+              atualizados antes da contratação. Os recursos futuros estão
+              identificados em cada plano.
             </p>
           </div>
           <div className="plans">
             {[
               {
                 name: "Starter",
-                price: "149",
+                price: "0,00",
                 desc: "O primeiro passo para organizar sua frota.",
                 items: [
                   "Até 15 veículos",
@@ -405,7 +406,7 @@ export default function Home() {
               },
               {
                 name: "Pro",
-                price: "449",
+                price: "0,00",
                 desc: "Mais profundidade para sua operação.",
                 items: [
                   "Até 60 veículos e 10 usuários",
@@ -416,7 +417,7 @@ export default function Home() {
               },
               {
                 name: "Enterprise",
-                price: "1.200",
+                price: "0,00",
                 desc: "Para operações que precisam ir além.",
                 items: [
                   "Limites sob consulta",
@@ -436,7 +437,6 @@ export default function Home() {
                 <span className="label">{p.name}</span>
                 <p>{p.desc}</p>
                 <div className="price">
-                  {i === 2 && <small>A partir de </small>}
                   <span>R$</span> {p.price}
                   <small>{" / mês"}</small>
                 </div>
