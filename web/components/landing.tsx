@@ -511,6 +511,8 @@ export default function Home() {
       <footer className="container footer">
         <Brand />
         <span>Desenvolvido por 2026@ Geevheit Software Solution</span>
+        <Link href="/termos">Termos de Uso</Link>
+        <Link href="/privacidade">Privacidade</Link>
         <Link href="/login">
           Acessar minha conta <ArrowUpRight size={14} />
         </Link>
