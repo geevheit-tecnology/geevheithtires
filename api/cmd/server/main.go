@@ -11,7 +11,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -88,7 +90,7 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
-	if d.Decode(v) != nil {
+	if d.Decode(v) != nil || d.Decode(new(any)) != io.EOF {
 		problem(w, 400, "Dados inválidos.")
 		return false
 	}
@@ -154,7 +156,10 @@ func validCNPJ(s string) bool {
 }
 func (a *App) rate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := strings.Split(r.RemoteAddr, ":")[0]
+		key, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			key = r.RemoteAddr
+		}
 		v, _ := a.limiter.LoadOrStore(key, &rateWindow{at: time.Now()})
 		b := v.(*rateWindow)
 		b.Lock()
@@ -166,6 +171,7 @@ func (a *App) rate(next http.Handler) http.Handler {
 		ok := b.count <= 30
 		b.Unlock()
 		if !ok {
+			w.Header().Set("Retry-After", "60")
 			problem(w, 429, "Muitas tentativas. Aguarde um minuto.")
 			return
 		}
