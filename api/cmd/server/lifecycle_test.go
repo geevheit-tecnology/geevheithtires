@@ -45,7 +45,7 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 	defer func() {
 		for _, c := range companies {
 			_, _ = admin.Exec(ctx, "select set_config('app.company_id',$1,false)", c)
-			for _, table := range []string{"tire_operations", "tire_movements", "tire_policies", "checklist_batches", "sync_log", "audit_log", "alerts", "inspections", "tires", "vehicles", "refresh_tokens", "account_tokens", "billing_invoices", "subscriptions", "users"} {
+			for _, table := range []string{"tire_operations", "tire_movements", "tire_policies", "checklist_batches", "sync_log", "audit_log", "alerts", "inspections", "tires", "vehicles", "drivers", "refresh_tokens", "account_tokens", "billing_invoices", "subscriptions", "users"} {
 				if _, err := admin.Exec(ctx, "delete from "+table+" where company_id=$1", c); err != nil {
 					t.Error(err)
 				}
@@ -71,6 +71,11 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 	r.Get("/api/v1/vehicles/{id}/tire-map", a.tireMap)
 	r.Patch("/api/v1/vehicles/{id}/odometer", a.updateOdometer)
 	r.Patch("/api/v1/tire-policy", a.setTirePolicy)
+	r.Patch("/api/v1/tires/{id}/identity", a.updateTireIdentity)
+	r.Post("/api/v1/drivers", a.saveDriver)
+	r.Patch("/api/v1/drivers/{id}", a.saveDriver)
+	r.Get("/api/v1/{resource:drivers|tires}", a.list)
+	r.Patch("/api/v1/vehicles/{id}/driver", a.assignDriver)
 	request := func(method, path string, who int, body any, want int) map[string]any {
 		t.Helper()
 		b, _ := json.Marshal(body)
@@ -94,8 +99,23 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 		return request("POST", "vehicles", who, map[string]any{"plate": plate, "model": "QA truck", "template_id": "tractor-6x2", "current_km": 1000}, 201)["id"].(string)
 	}
 	v1, v2, foreign := vehicle("AAA1B23", 0), vehicle("BBB1C23", 0), vehicle("CCC1D23", 1)
+	driver := request("POST", "drivers", 0, map[string]any{"name": "Motorista QA"}, 201)["id"].(string)
+	foreignDriver := request("POST", "drivers", 1, map[string]any{"name": "Motorista de outra empresa"}, 201)["id"].(string)
+	request("PATCH", "vehicles/"+v1+"/driver", 0, map[string]any{"driver_id": foreignDriver}, 422)
+	request("PATCH", "vehicles/"+foreign+"/driver", 0, map[string]any{"driver_id": driver}, 404)
+	request("PATCH", "vehicles/"+v1+"/driver", 2, map[string]any{"driver_id": driver}, 403)
+	request("GET", "drivers", 2, nil, 403)
+	if len(request("GET", "drivers", 0, nil, 200)["data"].([]any)) != 1 {
+		t.Fatal("cross-tenant driver leak")
+	}
+	request("PATCH", "vehicles/"+v1+"/driver", 0, map[string]any{"driver_id": driver}, 200)
+	request("PATCH", "drivers/"+driver, 1, map[string]any{"name": "Outra empresa não pode alterar"}, 404)
+	request("POST", "drivers", 0, map[string]any{"name": "CNH inválida", "license_number": "123"}, 422)
+	expiredDriver := request("POST", "drivers", 0, map[string]any{"name": "CNH vencida QA", "license_number": "12345678901", "license_expires_on": "2020-01-01"}, 201)["id"].(string)
+	request("PATCH", "vehicles/"+v2+"/driver", 0, map[string]any{"driver_id": expiredDriver}, 422)
+	request("PATCH", "drivers/"+driver, 0, map[string]any{"name": "Motorista QA", "active": false}, 409)
 	create := func(code string, installed bool) string {
-		body := map[string]any{"code": code, "brand": "QA Brand", "size": "295/80 R22.5", "tread_mm": 8, "acquisition_cost": 1000}
+		body := map[string]any{"code": code, "serial_number": "SERIAL-" + code, "dot_code": "1025", "expires_on": "2035-12-31", "road_use": "MISTO", "brand": "QA Brand", "size": "295/80 R22.5", "tread_mm": 8, "acquisition_cost": 1000}
 		if installed {
 			body["vehicle_id"] = v1
 			body["position"] = "1EE"
@@ -103,6 +123,13 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 		return request("POST", "tires", 0, body, 201)["id"].(string)
 	}
 	first, second := create("QA-STOCK", false), create("QA-INSTALLED", true)
+	if snapshot(second)["driver_name"] != "Motorista QA" || snapshot(first)["serial_number"] != "SERIAL-QA-STOCK" {
+		t.Fatal("missing tire identity or vehicle driver")
+	}
+	registration := request("GET", "tires/"+second+"/lifecycle", 0, nil, 200)["movements"].([]any)[0].(map[string]any)
+	if registration["to_driver_name"] != "Motorista QA" || registration["life_number"] != float64(1) {
+		t.Fatal("missing immutable driver/life snapshot")
+	}
 	move := func(tid, action string, extra map[string]any, want int) map[string]any {
 		body := map[string]any{"client_id": id(), "action": action, "expected_version": snapshot(tid)["version"], "reason": "QA physical operation confirmed"}
 		for k, v := range extra {
@@ -270,4 +297,40 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 	if count("inspection_due", true) < 1 {
 		t.Fatal("scheduled inspection warning missing")
 	}
+	// Unknown legacy identity stays unknown until explicitly completed; stale/foreign edits fail.
+	legacy := create("QA-LEGACY", false)
+	_, e = admin.Exec(ctx, "update tires set dot_code=null,serial_number=null,expires_on=null,road_use='NAO_INFORMADO' where company_id=$1 and id=$2", companies[0], legacy)
+	if e != nil {
+		t.Fatal(e)
+	}
+	move(legacy, "INSTALL", map[string]any{"vehicle_id": v1, "position": "2DE", "vehicle_km": 12100}, 422)
+	identity := map[string]any{"code": "QA-LEGACY", "serial_number": "SERIAL-LEGACY", "dot_code": "1025", "expires_on": "2026-01-01", "road_use": "TERRA", "expected_version": snapshot(legacy)["version"]}
+	request("PATCH", "tires/"+legacy+"/identity", 1, identity, 409)
+	request("PATCH", "tires/"+legacy+"/identity", 2, identity, 403)
+	request("PATCH", "tires/"+legacy+"/identity", 0, identity, 200)
+	request("PATCH", "tires/"+legacy+"/identity", 0, identity, 409)
+	move(legacy, "INSTALL", map[string]any{"vehicle_id": v1, "position": "2DE", "vehicle_km": 12100}, 422)
+	if count("expiry", true) < 1 {
+		t.Fatal("expired tire alert missing")
+	}
+	for _,item:=range request("GET","tires",0,nil,200)["data"].([]any) {row:=item.(map[string]any);if row["id"]==legacy && row["status"]!="critico" {t.Fatal("expired tire shown as healthy")}}
+	identity["expires_on"] = "2035-12-31"
+	identity["expected_version"] = snapshot(legacy)["version"]
+	request("PATCH", "tires/"+legacy+"/identity", 0, identity, 200)
+	move(legacy, "INSTALL", map[string]any{"vehicle_id": v1, "position": "2DE", "vehicle_km": 12100}, 201)
+	if count("expiry", true) != 0 {
+		t.Fatal("fixed expiry alert not resolved")
+	}
+	// Reassigning or renaming the driver must not rewrite old movement snapshots.
+	request("PATCH", "drivers/"+driver, 0, map[string]any{"name": "Motorista QA atualizado", "active": true}, 200)
+	oldRegistration := request("GET", "tires/"+second+"/lifecycle", 0, nil, 200)["movements"].([]any)
+	for _, item := range oldRegistration {
+		m := item.(map[string]any)
+		if m["action"] == "REGISTER" && m["to_driver_name"] != "Motorista QA" {
+			t.Fatal("driver history was rewritten")
+		}
+	}
+	request("PATCH", "vehicles/"+v1+"/driver", 0, map[string]any{"driver_id": ""}, 200)
+	request("PATCH", "drivers/"+driver, 0, map[string]any{"name": "Motorista QA atualizado", "active": false}, 200)
+	request("PATCH", "vehicles/"+v1+"/driver", 0, map[string]any{"driver_id": driver}, 422)
 }

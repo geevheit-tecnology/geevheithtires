@@ -1,4 +1,5 @@
 "use client";
+import {positionLabel} from "../lib/tire-position";
 export type Tire = {
   id: string;
   code: string;
@@ -11,6 +12,10 @@ export type Tire = {
   vehicle_id?: string;
   version?: number;
   stock_location?: string;
+  serial_number?: string | null;
+  dot_code?: string | null;
+  expires_on?: string | null;
+  road_use?: string;
 };
 export function TireMap({
   positions,
@@ -34,16 +39,19 @@ export function TireMap({
         disabled={!t || !onSelect}
         onClick={() => t && onSelect?.(t)}
         aria-label={`${p}: ${t ? `${t.code}, ${t.tread_mm} milímetros` : "sem pneu"}`}
+        aria-description={positionLabel(p,positions)}
+        title={`${positionLabel(p,positions)}${t?.serial_number?` · Série ${t.serial_number}`:""}`}
       >
-        <span>{p}</span>
+        <span>{p.startsWith("STEP")?p:`${positions.indexOf(p)+1} · ${p}`}</span>
         <b>{t?.code || "—"}</b>
-        <small>{t ? `${Number(t.tread_mm).toFixed(1)} mm` : "Vazio"}</small>
+        <small>{t ? `${Number(t.tread_mm).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})} mm` : "Vazio"}</small>
       </button>
     );
   }
   return (
     <div className="vehicle-map">
       <div className="front">↑ FRENTE DO VEÍCULO</div>
+      <div className="map-sides"><span>← Lado esquerdo</span><span>Lado direito →</span></div>
       <div className="chassis">
         {axles.map((a) => (
           <div className="axle" key={a}>

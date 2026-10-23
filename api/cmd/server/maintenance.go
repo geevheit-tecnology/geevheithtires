@@ -22,7 +22,7 @@ func (a *App) refreshMaintenance(ctx context.Context, t pgx.Tx, company string) 
 	}
 	rows, e := t.Query(ctx, `select t.id,t.code,t.size,t.state,t.tread_mm,t.structural_damage,t.retread_count,
  t.tracked_km+case when t.vehicle_id is not null and t.position not like 'STEP%' then greatest(0,v.current_km-t.mounted_at_km) else 0 end-t.rotation_baseline_km,
- coalesce(t.latest_inspected_at,t.measurement_cycle_at,t.created_at),i.pressure_psi,i.temperature_c
+ coalesce(t.latest_inspected_at,t.measurement_cycle_at,t.created_at),i.pressure_psi,i.temperature_c,t.expires_on,(t.dot_code is not null and t.serial_number is not null and t.expires_on is not null and t.road_use<>'NAO_INFORMADO')
  from tires t left join vehicles v on v.company_id=t.company_id and v.id=t.vehicle_id
  left join lateral(select pressure_psi,temperature_c from inspections where company_id=t.company_id and tire_id=t.id and inspected_at>=t.measurement_cycle_at order by inspected_at desc,id desc limit 1) i on true
  where t.company_id=$1 and t.deleted_at is null `, company)
@@ -40,20 +40,35 @@ func (a *App) refreshMaintenance(ctx context.Context, t pgx.Tx, company string) 
 		var sinceRotation int64
 		var last time.Time
 		var pressure, temperature *float64
-		if e = rows.Scan(&tid, &code, &size, &state, &tread, &damage, &retreads, &sinceRotation, &last, &pressure, &temperature); e != nil {
+		var expiry *time.Time
+		var complete bool
+		if e = rows.Scan(&tid, &code, &size, &state, &tread, &damage, &retreads, &sinceRotation, &last, &pressure, &temperature, &expiry, &complete); e != nil {
 			rows.Close()
 			return e
 		}
 		if _, ok := stock[size]; !ok {
 			stock[size] = 0
 		}
-		if state == "EM_ESTOQUE" && !damage && tread >= p.Critical {
+		if state == "EM_ESTOQUE" && !damage && tread >= p.Critical && complete && expiry != nil && !expiry.Before(now.UTC().Truncate(24*time.Hour)) {
 			stock[size]++
 		}
 		add := func(kind, msg, severity string) {
 			desired = append(desired, maintenanceAlert{kind + ":" + tid, kind, tid, code + ": " + msg, severity})
 		}
-		if state == "EM_RECAPAGEM" || state == "DESCARTADO" {
+		if state == "DESCARTADO" {
+			continue
+		}
+		if !complete {
+			add("identity_missing", "complete número de série, DOT, validade e tipo de via no cadastro.", "alerta")
+		}
+		if expiry != nil {
+			if expiry.Before(now.UTC().Truncate(24 * time.Hour)) {
+				add("expiry", "validade operacional vencida. Manter fora de operação e solicitar avaliação técnica.", "critico")
+			} else if !expiry.After(now.AddDate(0, 0, 30)) {
+				add("expiry", "validade operacional vence nos próximos 30 dias. Planejar avaliação e substituição.", "alerta")
+			}
+		}
+		if state == "EM_RECAPAGEM" {
 			continue
 		}
 		if damage {

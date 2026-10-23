@@ -41,6 +41,10 @@ const credentials = JSON.parse(
     });
     const tire = await call("tires", {
       code: "QA-LIFECYCLE-001",
+      serial_number: "SERIAL-LIFECYCLE-001",
+      dot_code: "1025",
+      expires_on: "2035-12-31",
+      road_use: "MISTO",
       brand: "Marca QA",
       size: "295/80 R22.5",
       tread_mm: 8,

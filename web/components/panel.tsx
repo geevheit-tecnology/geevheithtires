@@ -23,12 +23,17 @@ import VehicleConfigurationFields, { VehicleConfiguration } from "./vehicle-conf
 import VehicleOdometer from "./vehicle-odometer";
 import { neonClient, neonEnabled } from "./neon-client";
 import { TireMap, Tire } from "./tire-map";
+import DriversPanel, {VehicleDriver} from "./drivers-panel";
+import {TireIdentityFields} from "./tire-identity-fields";
+import {positionLabel} from "../lib/tire-position";
 type Vehicle = {
   id: string;
   plate: string;
   model: string;
   template_id: string;
   current_km: number;
+  driver_id?: string|null;
+  driver_name?: string|null;
 };
 type User = { id: string; name: string; email: string; role: string };
 type Alert = {
@@ -52,6 +57,7 @@ const nav = [
   { id: "tires", name: "Pneus", icon: CircleDot },
   { id: "alerts", name: "Alertas", icon: Bell },
   { id: "users", name: "Equipe", icon: Users },
+  { id: "drivers", name: "Motoristas", icon: Users },
   { id: "plan", name: "Plano e cobrança", icon: CreditCard },
 ];
 export default function Panel() {
@@ -192,6 +198,7 @@ export default function Panel() {
     if (modal === "tires") {
       data.tread_mm = Number(data.tread_mm);
       data.acquisition_cost = Number(data.acquisition_cost);
+      data.retread_count = Number(data.retread_count);
       if (!data.vehicle_id) {
         delete data.vehicle_id;
         delete data.position;
@@ -250,7 +257,7 @@ export default function Panel() {
         </div>
         <nav>
           {nav
-            .filter((n) => n.id !== "users" || manage)
+            .filter((n) => !["users","drivers"].includes(n.id) || manage)
             .map((n) => (
               <button
                 className={tab === n.id ? "active" : ""}
@@ -540,6 +547,7 @@ export default function Panel() {
                         <span className="pill">Mapa de pneus</span>
                       </div>
                       {(manage||user?.role==="tire_tech")&&<VehicleOdometer vehicle={map.vehicle} onChange={async()=>{await load();setMap(await api(`vehicles/${map.vehicle.id}/tire-map`))}}/>}
+                      <VehicleDriver vehicle={map.vehicle} manage={manage} onSaved={async()=>{await load();setMap(await api(`vehicles/${map.vehicle.id}/tire-map`))}}/>
                       <TireMap
                         positions={map.positions}
                         tires={map.tires}
@@ -650,6 +658,7 @@ export default function Panel() {
               </section>
             </>
           )}
+          {tab === "drivers" && manage && <DriversPanel/>}
           {tab === "plan" && <BillingPanel owner={user?.role === "owner"} />}
         </main>
       </div>
@@ -723,14 +732,17 @@ export default function Panel() {
                 <>
                   <div className="form-grid">
                     <label>
-                      Código
+                      Número de fogo
                       <input
                         name="code"
                         required
                         placeholder="P00123"
                         minLength={2}
+                        maxLength={50}
                       />
                     </label>
+                    <TireIdentityFields/>
+                    <label>Recapagens anteriores à entrada<select name="retread_count" defaultValue="0" required>{Array.from({length:11},(_,i)=><option key={i} value={i}>{i===0?"Nenhuma · 1ª vida (banda original)":`${i} recapagem(ns) · ${i+1}ª vida`}</option>)}</select></label>
                     <label>
                       Marca
                       <input
@@ -794,7 +806,7 @@ export default function Panel() {
                           positions.forEach((p) => {
                             const o = document.createElement("option");
                             o.value = p;
-                            o.text = p;
+                            o.text = positionLabel(p,positions);
                             position.add(o);
                           });
                         }
@@ -810,7 +822,7 @@ export default function Panel() {
                   </label>
                   <label>
                     Posição
-                    <select name="position" disabled defaultValue="">
+                    <select name="position" aria-label="Posição" disabled defaultValue="">
                       <option value="">Selecione um veículo</option>
                     </select>
                   </label>

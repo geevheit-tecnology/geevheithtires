@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -114,11 +115,14 @@ type tireSnapshot struct {
 	Retreads                  int
 	Tread                     float64
 	Damage                    bool
+	Expiry                    *time.Time
+	IdentityComplete          bool
+	Road                      string
 }
 
 func loadTire(ctx context.Context, t pgx.Tx, company, tid string) (tireSnapshot, error) {
 	var s tireSnapshot
-	e := t.QueryRow(ctx, `select id,code,state,stock_location,vehicle_id,position,mounted_at_km,tracked_km,rotation_baseline_km,version,retread_count,tread_mm,structural_damage from tires where company_id=$1 and id=$2 and deleted_at is null for update`, company, tid).Scan(&s.ID, &s.Code, &s.State, &s.Location, &s.Vehicle, &s.Position, &s.Mounted, &s.KM, &s.Rotation, &s.Version, &s.Retreads, &s.Tread, &s.Damage)
+	e := t.QueryRow(ctx, `select id,code,state,stock_location,vehicle_id,position,mounted_at_km,tracked_km,rotation_baseline_km,version,retread_count,tread_mm,structural_damage,expires_on,(dot_code is not null and serial_number is not null and expires_on is not null and road_use<>'NAO_INFORMADO'),road_use from tires where company_id=$1 and id=$2 and deleted_at is null for update`, company, tid).Scan(&s.ID, &s.Code, &s.State, &s.Location, &s.Vehicle, &s.Position, &s.Mounted, &s.KM, &s.Rotation, &s.Version, &s.Retreads, &s.Tread, &s.Damage, &s.Expiry, &s.IdentityComplete, &s.Road)
 	return s, e
 }
 func vehicleOdo(ctx context.Context, t pgx.Tx, company, vid string, km *int) (int, error) {
@@ -145,7 +149,7 @@ func event(ctx context.Context, t pgx.Tx, c *Claims, before, after tireSnapshot,
 	if client != "" {
 		operation = client
 	}
-	_, e := t.Exec(ctx, `insert into tire_movements(id,company_id,tire_id,actor_id,client_id,action,from_state,to_state,from_vehicle_id,from_position,to_vehicle_id,to_position,source_km,destination_km,tracked_km,stock_location,reason,supplier,cost_cents,tread_mm) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`, id(), c.Company, after.ID, actor, operation, action, before.State, after.State, before.Vehicle, before.Position, after.Vehicle, after.Position, source, dest, after.KM, after.Location, reason, supplier, cost, after.Tread)
+	_, e := t.Exec(ctx, `insert into tire_movements(id,company_id,tire_id,actor_id,client_id,action,from_state,to_state,from_vehicle_id,from_position,to_vehicle_id,to_position,source_km,destination_km,tracked_km,stock_location,reason,supplier,cost_cents,tread_mm,life_number,road_use,from_driver_name,to_driver_name) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,(select d.name from vehicles v join drivers d on d.company_id=v.company_id and d.id=v.driver_id where v.company_id=$2 and v.id=$9),(select d.name from vehicles v join drivers d on d.company_id=v.company_id and d.id=v.driver_id where v.company_id=$2 and v.id=$11))`, id(), c.Company, after.ID, actor, operation, action, before.State, after.State, before.Vehicle, before.Position, after.Vehicle, after.Position, source, dest, after.KM, after.Location, reason, supplier, cost, after.Tread, after.Retreads+1, after.Road)
 	return e
 }
 func rollingTire(s tireSnapshot) bool {
@@ -246,6 +250,10 @@ func (a *App) moveTire(w http.ResponseWriter, r *http.Request) {
 	}
 	installedAction := d.Action == "INSTALL" || d.Action == "TRANSFER" || d.Action == "ROTATE"
 	if installedAction {
+		if !before.IdentityComplete || before.Expiry == nil || before.Expiry.Before(time.Now().UTC().Truncate(24*time.Hour)) {
+			problem(w, 422, "Complete a identificação do pneu e confira a validade antes de instalar, transferir ou fazer rodízio.")
+			return
+		}
 		if d.Action == "INSTALL" && before.State != "EM_ESTOQUE" || d.Action != "INSTALL" && before.State != "INSTALADO" {
 			problem(w, 409, "Ação incompatível com o estado atual.")
 			return
@@ -301,7 +309,7 @@ func (a *App) moveTire(w http.ResponseWriter, r *http.Request) {
 				inspectionError(w, err)
 				return
 			}
-			if peer.Version != d.SwapVersion || peer.Damage || peer.Tread < p.Critical || peer.Mounted == nil || *dest < *peer.Mounted {
+			if peer.Version != d.SwapVersion || peer.Damage || peer.Tread < p.Critical || peer.Mounted == nil || *dest < *peer.Mounted || !peer.IdentityComplete || peer.Expiry == nil || peer.Expiry.Before(time.Now().UTC().Truncate(24*time.Hour)) {
 				problem(w, 409, "O outro pneu mudou ou precisa de avaliação técnica. Atualize o mapa.")
 				return
 			}
@@ -440,7 +448,7 @@ func (a *App) tireLifecycle(w http.ResponseWriter, r *http.Request) {
 	defer t.Rollback(r.Context())
 	ctx := r.Context()
 	var summary json.RawMessage
-	e = t.QueryRow(ctx, `select to_jsonb(t)||jsonb_build_object('plate',v.plate,'current_vehicle_km',v.current_km,'total_tracked_km',t.tracked_km+case when t.vehicle_id is not null and t.position not like 'STEP%' then greatest(0,v.current_km-t.mounted_at_km) else 0 end,'movement_cost_cents',coalesce((select sum(cost_cents) from tire_movements m where m.company_id=t.company_id and m.tire_id=t.id),0)) from tires t left join vehicles v on v.company_id=t.company_id and v.id=t.vehicle_id where t.company_id=$1 and t.id=$2 and t.deleted_at is null`, claims(r).Company, tid).Scan(&summary)
+	e = t.QueryRow(ctx, `select to_jsonb(t)||jsonb_build_object('plate',v.plate,'driver_name',(select d.name from drivers d where d.company_id=t.company_id and d.id=v.driver_id),'current_vehicle_km',v.current_km,'total_tracked_km',t.tracked_km+case when t.vehicle_id is not null and t.position not like 'STEP%' then greatest(0,v.current_km-t.mounted_at_km) else 0 end,'movement_cost_cents',coalesce((select sum(cost_cents) from tire_movements m where m.company_id=t.company_id and m.tire_id=t.id),0)) from tires t left join vehicles v on v.company_id=t.company_id and v.id=t.vehicle_id where t.company_id=$1 and t.id=$2 and t.deleted_at is null`, claims(r).Company, tid).Scan(&summary)
 	if e != nil {
 		problem(w, 404, "Pneu não encontrado.")
 		return

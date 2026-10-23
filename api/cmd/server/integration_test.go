@@ -180,7 +180,7 @@ func TestTenantFlow(t *testing.T) {
 	if len(list["data"].([]any)) != 0 {
 		t.Fatal("cross-tenant vehicle leak")
 	}
-	tireBody := map[string]any{"code": "P00123", "brand": "Michelin", "model": "X", "size": "295/80R22.5", "tread_mm": 8, "acquisition_cost": 2500, "vehicle_id": vehicle, "position": "1EE"}
+	tireBody := map[string]any{"code": "P00123", "serial_number": "QA-SERIAL-001", "dot_code": "1025", "expires_on": "2035-12-31", "road_use": "MISTO", "brand": "Michelin", "model": "X", "size": "295/80R22.5", "tread_mm": 8, "acquisition_cost": 2500, "vehicle_id": vehicle, "position": "1EE"}
 	request("POST", "/tires", tokens[1], tireBody, 422)
 	tire := request("POST", "/tires", tokens[0], tireBody, 201)["id"].(string)
 	tireBody["code"] = "P00124"

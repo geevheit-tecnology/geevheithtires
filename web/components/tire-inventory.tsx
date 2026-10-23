@@ -2,6 +2,8 @@
 import { FormEvent, useEffect, useState, useRef } from "react";
 import { api } from "./api";
 import { Tire } from "./tire-map";
+import {TireIdentityEditor,roadNames} from "./tire-identity-fields";
+import {positionLabel} from "../lib/tire-position";
 type Vehicle = { id: string; plate: string; current_km: number };
 type Asset = Tire & {
   vehicle_id?: string;
@@ -14,6 +16,8 @@ type Asset = Tire & {
   movement_cost_cents: number;
   plate: string | null;
   current_vehicle_km: number | null;
+  driver_name?: string|null;
+  initial_retread_count?: number;
 };
 type Movement = {
   id: string;
@@ -34,6 +38,10 @@ type Movement = {
   cost_cents: number;
   actor_name: string | null;
   tread_mm: number;
+  life_number?: number|null;
+  road_use?: string|null;
+  from_driver_name?: string|null;
+  to_driver_name?: string|null;
 };
 type Details = { tire: Asset; movements: Movement[]; next_cursor: string };
 type Policy = {
@@ -324,7 +332,7 @@ export default function TireInventory({
       </div>
       <TirePolicy manage={manage} onChange={onChange} />
       <label className="inventory-search">
-        Buscar código, marca ou medida
+        Buscar número de fogo, série, DOT, marca ou medida
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -358,7 +366,7 @@ export default function TireInventory({
               .filter(
                 (t) =>
                   (!filter || t.state === filter) &&
-                  `${t.code} ${t.brand} ${t.size}`
+                  `${t.code} ${t.serial_number||""} ${t.dot_code||""} ${t.brand} ${t.size}`
                     .toLowerCase()
                     .includes(search.toLowerCase()),
               )
@@ -366,6 +374,7 @@ export default function TireInventory({
                 <tr key={t.id}>
                   <td>
                     <b>{t.code}</b>
+                    <small>Série: {t.serial_number||"Não informada"}</small>
                   </td>
                   <td>
                     {t.brand}
@@ -431,6 +440,17 @@ export default function TireInventory({
               ? `${asset.plate} / ${asset.position}`
               : asset.stock_location}
           </p>
+          <p><strong>{asset.retread_count+1}ª vida</strong> · {asset.retread_count===0?"Banda original":`${asset.retread_count} recapagem(ns)`} · {roadNames[asset.road_use||""]||"Via não informada"}</p>
+          <ol className="lifecycle-stages" aria-label="Etapas do ciclo do pneu">{Object.entries(stateNames).map(([state,name])=><li key={state} aria-current={asset.state===state?"step":undefined}>{name}</li>)}</ol>
+          <div className="lifecycle-facts">
+            <p><strong>Número de fogo</strong><br/>{asset.code}</p>
+            <p><strong>Número de série</strong><br/>{asset.serial_number||"Não informado"}</p>
+            <p><strong>DOT</strong><br/>{asset.dot_code||"Não informado"}</p>
+            <p><strong>Validade operacional</strong><br/>{asset.expires_on?new Date(asset.expires_on.slice(0,10)+"T00:00:00Z").toLocaleDateString("pt-BR",{timeZone:"UTC"}):"Não informada"}</p>
+            <p><strong>Posição e lado</strong><br/>{asset.position?positionLabel(asset.position):"Fora do veículo"}</p>
+            <p><strong>Motorista do veículo</strong><br/>{asset.driver_name||"Não vinculado"}</p>
+          </div>
+          {manage&&<TireIdentityEditor tire={asset} onSaved={async()=>{await onChange();await open(asset.id)}}/>}
           <div className="lifecycle-facts">
             <p>
               <strong>{number(asset.total_tracked_km)} km</strong>
@@ -440,7 +460,7 @@ export default function TireInventory({
             <p>
               <strong>{asset.retread_count}</strong>
               <br />
-              Recapagens registradas
+              Recapagens totais, incluindo as anteriores à entrada
             </p>
             <p>
               <strong>
@@ -567,7 +587,7 @@ export default function TireInventory({
                             );
                             return (
                               <option key={p} value={p}>
-                                {p}{" "}
+                                {positionLabel(p,map.positions)}{" "}
                                 {tire ? `· ${tire.code} (ocupada)` : "· livre"}
                               </option>
                             );
@@ -710,6 +730,7 @@ export default function TireInventory({
                   {m.to_state === "EM_ESTOQUE" ? ` · ${m.stock_location}` : ""}
                 </p>
                 <p>{m.reason}</p>
+                {(m.life_number||m.road_use||m.from_driver_name||m.to_driver_name)&&<p>{m.life_number?`${m.life_number}ª vida · `:""}{m.road_use?`${roadNames[m.road_use]||m.road_use}`:""}{m.from_driver_name?` · motorista na saída: ${m.from_driver_name}`:""}{m.to_driver_name?` · motorista na entrada: ${m.to_driver_name}`:""}</p>}
                 <small>
                   {m.actor_name || "Sistema"} · {number(m.tracked_km)} km
                   rastreados · sulco {m.tread_mm} mm
