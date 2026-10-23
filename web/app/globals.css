@@ -71,7 +71,7 @@ h1,
 h2,
 h3 {
   line-height: 1.1;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.025em;
 }
 p {
   color: var(--muted);
@@ -805,6 +805,8 @@ label small {
 }
 .footer {
   display: flex;
+  flex-wrap: wrap;
+  gap: 20px 24px;
   justify-content: space-between;
   align-items: center;
   padding-block: 40px;
@@ -821,8 +823,8 @@ label small {
   font-size: 5px;
 }
 .footer > span,
-.footer > a:last-child {
-  font-size: 10px;
+.footer > a:not(.brand) {
+  font-size: 12px;
   color: var(--muted);
   display: flex;
   gap: 8px;

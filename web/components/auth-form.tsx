@@ -140,9 +140,9 @@ export function AuthForm({
         <div>
           <span className="eyebrow">CONTROLE EM CADA QUILÔMETRO</span>
           <h1>
-            O próximo passo
+            O próximo passo{" "}
             <br />
-            da sua frota
+            da sua frota{" "}
             <br />
             <em>começa aqui.</em>
           </h1>

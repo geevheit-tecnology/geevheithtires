@@ -148,9 +148,9 @@ export default function Home() {
                 GESTÃO DE PNEUS PARA QUEM MOVE O BRASIL
               </div>
               <h1>
-                Mais estrada.
+                Mais estrada.{" "}
                 <br />
-                Menos custos.
+                Menos custos.{" "}
                 <br />
                 <em>Cada pneu conta.</em>
               </h1>
@@ -213,7 +213,7 @@ export default function Home() {
                     </p>
                   </div>
                   <strong>
-                    {selected.tread_mm} <small>mm</small>
+                    {selected.tread_mm.toLocaleString("pt-BR")} <small>mm</small>
                   </strong>
                 </div>
               </div>
@@ -252,7 +252,7 @@ export default function Home() {
                 UMA OPERAÇÃO. UMA VISÃO COMPLETA.
               </div>
               <h2>
-                O pneu deixa sinais.
+                O pneu deixa sinais.{" "}
                 <br />
                 Sua gestão precisa enxergar.
               </h2>
@@ -267,7 +267,7 @@ export default function Home() {
               <span className="feature-number">01 / VISIBILIDADE</span>
               <CircleDot />
               <h3>
-                Saiba onde cada
+                Saiba onde cada{" "}
                 <br />
                 pneu está.
               </h3>
@@ -283,7 +283,7 @@ export default function Home() {
               <span className="feature-number">02 / OPERAÇÃO</span>
               <ScanLine />
               <h3>
-                Do pátio direto
+                Do pátio direto{" "}
                 <br />
                 para a decisão.
               </h3>
@@ -299,13 +299,14 @@ export default function Home() {
               <span className="feature-number">03 / EVOLUÇÃO</span>
               <BarChart3 />
               <h3>
-                Construa uma gestão
+                Construa uma gestão{" "}
                 <br />
                 guiada por dados.
               </h3>
               <p>
-                Acompanhe estoque, movimentações e manutenção dos pneus. CPK e
-                inteligência seguem no roadmap.
+                Acompanhe o estoque, as movimentações e a manutenção dos pneus.
+                O cálculo do custo por quilômetro e os recursos de inteligência
+                artificial estão previstos para as próximas etapas.
               </p>
               <a href="#planos">
                 Ver os planos previstos <ArrowUpRight size={18} />
@@ -318,9 +319,9 @@ export default function Home() {
             <div>
               <div className="eyebrow dark">COLOQUE NA PONTA DO LÁPIS</div>
               <h2>
-                Pequenas melhorias.
+                Pequenas melhorias.{" "}
                 <br />
-                Grandes quilômetros.
+                Mais economia.
               </h2>
               <p>
                 Simule o impacto de reduzir o gasto anual com pneus. Ajuste os
@@ -384,8 +385,8 @@ export default function Home() {
             <div className="eyebrow dark">CRESÇA NO SEU RITMO</div>
             <h2>Um plano para cada jornada.</h2>
             <p>
-              Referências comerciais previstas. Cobrança e recursos avançados em
-              implantação.
+              Valores de referência. Os pagamentos serão liberados após a ativação.
+              Os recursos futuros estão identificados em cada plano.
             </p>
           </div>
           <div className="plans">
@@ -409,8 +410,8 @@ export default function Home() {
                 items: [
                   "Até 60 veículos e 10 usuários",
                   "Gestão de estoque e ciclo de vida",
-                  "CPK, IA e relatórios (roadmap)",
-                  "Até 3 filiais (roadmap)",
+                  "Custo por km, IA e relatórios (previstos)",
+                  "Gestão de até 3 filiais (prevista)",
                 ],
               },
               {
@@ -419,8 +420,8 @@ export default function Home() {
                 desc: "Para operações que precisam ir além.",
                 items: [
                   "Limites sob consulta",
-                  "Integrações (roadmap)",
-                  "API e webhooks (roadmap)",
+                  "Integrações (previstas)",
+                  "API e webhooks (previstos)",
                   "Atendimento a combinar",
                 ],
               },
@@ -437,7 +438,7 @@ export default function Home() {
                 <div className="price">
                   {i === 2 && <small>A partir de </small>}
                   <span>R$</span> {p.price}
-                  <small>/mês</small>
+                  <small>{" / mês"}</small>
                 </div>
                 <Link
                   href="/cadastro"
@@ -461,7 +462,7 @@ export default function Home() {
           <div>
             <div className="eyebrow dark">SEM DÚVIDAS NA ESTRADA</div>
             <h2>
-              Antes de dar
+              Antes de dar{" "}
               <br />a partida.
             </h2>
           </div>
@@ -481,7 +482,7 @@ export default function Home() {
               ],
               [
                 "Todos os recursos dos planos já estão disponíveis?",
-                "Estoque, ciclo de vida, inspeções e alertas internos estão disponíveis na web. Cobrança, recursos marcados como roadmap e modo offline completo continuam previstos para as próximas etapas.",
+                "O controle de estoque, o ciclo de vida dos pneus, as inspeções e os alertas internos estão disponíveis no site. Os pagamentos ainda precisam ser ativados. Os recursos indicados como previstos e o funcionamento completo sem internet serão disponibilizados em etapas futuras.",
               ],
             ].map(([q, a]) => (
               <details key={q}>
@@ -498,7 +499,7 @@ export default function Home() {
           <div>
             <div className="eyebrow">SUA PRÓXIMA ROTA COMEÇA AQUI</div>
             <h2>
-              Leve sua gestão
+              Leve sua gestão{" "}
               <br />
               mais longe.
             </h2>
