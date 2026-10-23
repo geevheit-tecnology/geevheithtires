@@ -1,0 +1,27 @@
+"use client";
+import { FormEvent,useEffect,useState } from "react";
+import Link from "next/link";
+import {Brand} from "./brand";
+import {api} from "./api";
+import {Plan,money,date} from "./billing-panel";
+type Company={id:string;name:string;cnpj:string;status:string;trial_ends_at:string;paid_until:string|null;suspended:boolean;vehicles:number;users:number;plan_id:string|null};
+type Audit={id:number;action:string;target:string;reason:string;created_at:string};
+type Snapshot={companies:Company[];plans:Plan[];metrics:{companies:number;active:number;trials:number;received_cents:number};audit:Audit[]};
+const labels:Record<string,string>={active:"Ativa",trial:"Avaliação",expired:"Encerrada",suspended:"Suspensa"};
+export default function PlatformAdmin(){
+ const [data,setData]=useState<Snapshot|null>(null),[error,setError]=useState(""),[search,setSearch]=useState(""),[busy,setBusy]=useState(false),[notice,setNotice]=useState("");
+ const [action,setAction]=useState<{target:string;operation:string;name:string;published?:boolean}|null>(null);
+ async function load(){try{setData(await api("platform"));setError("")}catch(e){setError((e as Error).message)}}
+ useEffect(()=>{void load()},[]);
+ async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!action)return;const f=new FormData(e.currentTarget);setBusy(true);setNotice("");try{await api("platform/change",{target:action.target,operation:action.operation,reason:f.get("reason"),payload:action.operation==="trial"?{days:Number(f.get("days"))}:action.operation==="publish"?{published:action.published}:{}});setAction(null);setNotice("Alteração salva e registrada na auditoria.");await load()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
+ return <div className="commercial-admin"><header className="commercial-header"><Brand/><div><strong>Administração da plataforma</strong><p><Link href="/app">Voltar à minha empresa</Link></p></div></header><main className="container">
+ <h1>Super Admin</h1><p>Gestão comercial do GeevheitTire. As ações afetam empresas e ficam registradas.</p>
+ {error&&<div className="info" role="alert">{error} {!data&&<Link href="/login">Entrar com outra conta</Link>}</div>}
+ {notice&&<p role="status">{notice}</p>}
+ {data&&<><div className="commercial-grid">{[["Empresas",data.metrics.companies],["Assinaturas ativas",data.metrics.active],["Em avaliação",data.metrics.trials],["Recebido em produção",money(data.metrics.received_cents)]].map(([label,value])=><section className="surface" key={label}><span>{label}</span><h2>{value}</h2></section>)}</div>
+ <section className="surface"><h2>Planos comerciais</h2><p>A contratação automática via gateway de pagamento está desativada no momento. Os planos, limites e avaliações de empresas permanecem gerenciáveis abaixo.</p><div className="commercial-grid">{data.plans.map(p=><article key={p.id}><h3>{p.name} · {money(p.price_cents)}/mês</h3><p>{p.vehicle_limit} veículos · {p.user_limit} usuários</p><p>{p.published?"Publicado":"Rascunho"}</p><button className="button secondary" onClick={()=>setAction({target:p.id,operation:"publish",name:p.name,published:!p.published})}>{p.published?"Retirar de venda":"Publicar plano"}</button></article>)}</div></section>
+ <section className="surface"><h2>Empresas</h2><label>Buscar nas 200 empresas mais recentes<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome ou CNPJ"/></label><div className="commercial-scroll"><table className="commercial-table"><thead><tr><th>Empresa</th><th>Situação</th><th>Uso</th><th>Vigência</th><th>Ações</th></tr></thead><tbody>{data.companies.filter(c=>(c.name+c.cnpj).toLowerCase().includes(search.toLowerCase())).map(c=><tr key={c.id}><td><strong>{c.name}</strong><br/>{c.cnpj}<br/>{c.plan_id||"Avaliação Starter"}</td><td>{labels[c.status]}</td><td>{c.vehicles} veículos<br/>{c.users} usuários</td><td>Avaliação: {date(c.trial_ends_at)}<br/>Pago até: {date(c.paid_until)}</td><td><div className="commercial-actions"><button className="button secondary" onClick={()=>setAction({target:c.id,operation:"trial",name:c.name})}>Prorrogar avaliação</button><button className="button secondary" onClick={()=>setAction({target:c.id,operation:c.suspended?"restore":"suspend",name:c.name})}>{c.suspended?"Restaurar acesso":"Suspender"}</button></div></td></tr>)}</tbody></table></div></section>
+ <section className="surface"><h2>Auditoria administrativa</h2><p>Últimas 50 ações. Prorrogar avaliação e restaurar acesso não registram pagamentos.</p>{data.audit.map(a=><p key={a.id}>{date(a.created_at)} · {a.action} · {a.target}<br/>{a.reason}</p>)}</section><button className="button secondary" onClick={load}>Atualizar painel</button></>}
+ {action&&<section className="surface commercial-confirm" aria-label="Confirmar alteração"><h2>{({trial:"Prorrogar avaliação",suspend:"Suspender empresa",restore:"Restaurar empresa",publish:action.published?"Publicar plano":"Retirar plano"})[action.operation]}</h2><p>{action.name}</p><form onSubmit={submit}>{action.operation==="trial"&&<label>Dias adicionais (1 a 90)<input name="days" type="number" min="1" max="90" defaultValue="14" required/></label>}<label>Justificativa<textarea name="reason" minLength={5} maxLength={500} required/></label><div className="commercial-actions"><button className="button primary" disabled={busy}>{busy?"Salvando…":"Confirmar alteração"}</button><button className="button secondary" type="button" disabled={busy} onClick={()=>setAction(null)}>Cancelar</button></div></form></section>}
+ </main></div>
+}

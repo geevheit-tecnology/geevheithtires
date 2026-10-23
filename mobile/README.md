@@ -1,16 +1,18 @@
-# geevheittire
+# GeevheitTire Mobile
 
-A new Flutter project.
+Aplicativo Flutter Android/iOS do U0: login compartilhado com o painel, veículos da empresa e mapa dinâmico de pneus.
 
-## Getting Started
+```sh
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8087/api/v1
+```
 
-This project is a starting point for a Flutter application.
+Use a conta criada na web. `10.0.2.2` é o endereço do computador no emulador Android. Para aparelho físico use o IP local; em produção use a URL HTTPS da API.
 
-A few resources to get you started if this is your first Flutter project:
+```sh
+flutter analyze
+flutter test
+flutter build apk --debug
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+O refresh token usa `flutter_secure_storage`; o access token fica em memória. Checklist offline, fotos, leitura de QR e push ficam nas próximas entregas do P1. Consulte o [README do monorepo](../README.md) e [status](../docs/STATUS.md).

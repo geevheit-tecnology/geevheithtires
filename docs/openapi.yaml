@@ -1,0 +1,259 @@
+openapi: 3.1.0
+info:
+  title: GeevheitTire API
+  version: 0.1.0
+  description: Fundação U0. Erros usam application/problem+json. Listas usam data e next_cursor.
+servers:
+  - url: http://localhost:8087/api/v1
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string, format: email}
+        password: {type: string, minLength: 10, maxLength: 128}
+    Vehicle:
+      type: object
+      required: [plate, model, template_id, current_km]
+      properties:
+        plate: {type: string}
+        model: {type: string}
+        template_id: {type: string, enum: [tractor-6x2, trailer-3]}
+        current_km: {type: integer, minimum: 0}
+    Tire:
+      type: object
+      required: [code, brand, size, tread_mm, acquisition_cost]
+      properties:
+        code: {type: string}
+        brand: {type: string}
+        model: {type: string}
+        size: {type: string}
+        tread_mm: {type: number, exclusiveMinimum: 0, maximum: 40}
+        acquisition_cost: {type: number, minimum: 0}
+        vehicle_id: {type: string, format: uuid}
+        position: {type: string}
+    Inspection:
+      type: object
+      required: [client_id, tread_mm, pressure_psi, structural_damage]
+      properties:
+        client_id: {type: string, format: uuid}
+        tread_mm: {type: number, minimum: 0, maximum: 40}
+        pressure_psi: {type: number, minimum: 0, maximum: 200}
+        structural_damage: {type: boolean}
+paths:
+  /auth/register:
+    post:
+      security: []
+      summary: Criar empresa e proprietário com trial de 14 dias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Credentials'
+                - type: object
+                  required: [name, company, cnpj]
+                  properties:
+                    name: {type: string}
+                    company: {type: string}
+                    cnpj: {type: string}
+      responses:
+        '201': {description: Sessão criada e email_sent indica entrega de verificação}
+        '409': {description: Conflito no cadastro}
+        '422': {description: Dados inválidos}
+  /auth/login:
+    post:
+      security: []
+      summary: Autenticar usuário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Credentials'}
+      responses:
+        '200': {description: access_token, refresh_token e user}
+        '401': {description: Credenciais inválidas}
+  /auth/refresh:
+    post:
+      security: []
+      summary: Consumir refresh_token e emitir uma nova sessão
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: {type: string}
+      responses:
+        '200': {description: Nova sessão}
+        '401': {description: Token expirado ou consumido}
+  /auth/logout:
+    post:
+      security: []
+      summary: Revogar refresh_token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token: {type: string}
+      responses:
+        '200': {description: Token revogado; JWT de acesso expira em até 15 minutos}
+  /auth/recover:
+    post:
+      security: []
+      summary: Solicitar recuperação sem revelar se e-mail existe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: {type: string, format: email}
+      responses:
+        '200': {description: Instruções solicitadas; entrega depende de e-mail configurado}
+  /auth/accept:
+    post:
+      security: []
+      summary: Consumir token de verificação, convite ou recuperação
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string}
+                password: {type: string, minLength: 10, maxLength: 128}
+      responses:
+        '200': {description: Conta atualizada}
+        '422': {description: Token inválido ou senha inválida}
+  /me:
+    get:
+      summary: Identidade autenticada
+      responses:
+        '200': {description: Dados básicos sem hash de senha}
+  /dashboard:
+    get:
+      summary: Indicadores e trial da empresa autenticada
+      responses:
+        '200': {description: vehicles, tires, critical, alerts e company}
+  /vehicles:
+    get:
+      summary: Listar veículos da empresa
+      parameters:
+        - in: query
+          name: cursor
+          schema: {type: string}
+      responses:
+        '200': {description: data e next_cursor, até 50 registros}
+    post:
+      summary: Cadastrar veículo (owner ou manager)
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Vehicle'}
+      responses:
+        '201': {description: Veículo cadastrado}
+        '403': {description: Perfil sem permissão}
+        '409': {description: Placa duplicada}
+  /vehicles/{id}/tire-map:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: Mapa a partir do template e pneus instalados
+      responses:
+        '200': {description: vehicle, positions e tires}
+        '404': {description: Veículo não encontrado no tenant}
+  /tires:
+    get:
+      summary: Listar pneus com cursor
+      responses:
+        '200': {description: data e next_cursor}
+    post:
+      summary: Cadastrar e opcionalmente instalar pneu (owner ou manager)
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Tire'}
+      responses:
+        '201': {description: Pneu cadastrado}
+        '409': {description: Código duplicado ou posição ocupada}
+  /tires/{id}/inspections:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      summary: Registrar inspeção idempotente por company_id e client_id
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Inspection'}
+      responses:
+        '201': {description: Inspeção e classificação criadas}
+        '200': {description: Inspeção anterior para o mesmo client_id}
+        '403': {description: Motorista não pode realizar inspeção técnica neste U0}
+  /tires/{id}/history:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      summary: Últimas 100 inspeções do pneu no tenant
+      responses:
+        '200': {description: data}
+  /alerts:
+    get:
+      summary: Alertas da empresa com cursor
+      responses:
+        '200': {description: data e next_cursor}
+  /alerts/{id}/read:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: {type: string, format: uuid}
+    patch:
+      summary: Marcar alerta como lido
+      responses:
+        '200': {description: Atualizado}
+        '404': {description: Alerta não pertence à empresa ou não existe}
+  /users:
+    get:
+      summary: Listar equipe (owner ou manager)
+      responses:
+        '200': {description: data e next_cursor}
+        '403': {description: Acesso restrito}
+  /users/invite:
+    post:
+      summary: Convidar borracheiro ou inspetor por e-mail (owner ou manager)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, role]
+              properties:
+                name: {type: string}
+                email: {type: string, format: email}
+                role: {type: string, enum: [tire_tech, inspector]}
+      responses:
+        '201': {description: Convite enviado}
+        '503': {description: E-mail não configurado}
