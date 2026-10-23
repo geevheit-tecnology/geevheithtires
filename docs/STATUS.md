@@ -1,5 +1,7 @@
 # Status de implementação
 
+Consulte a [revisão sppec05](SPPEC05-READINESS.md) para evidências atuais, correções e bloqueios comerciais. Publicações históricas abaixo não comprovam que as novas alterações já estejam em produção.
+
 ## U0 — fundação conectada
 
 | Item | Situação |
@@ -25,7 +27,7 @@
 - Trial de 14 dias com limites de veículos/usuários e modo de consulta após vencimento. Super Admin permite publicar planos, suspender/restaurar empresas e prorrogar avaliação com auditoria.
 - Pagamentos Asaas estão pausados por decisão do proprietário. O adaptador permanece preparado, com `BILLING_PAYMENTS_ENABLED=false` por padrão; cobrança automática e renovação recorrente não estão liberadas.
 - O acesso Super Admin depende de uma conta já cadastrada e concessão pelo comando operacional `api/cmd/platform-admin`; não é concedido automaticamente pelo e-mail ou pelo perfil owner da empresa.
-- Apenas os dois templates solicitados no U0; filiais, acoplamento e demais templates ficam no P3.
+- Sete categorias e dezoito configurações de eixos/rodado estão disponíveis; filiais e acoplamento continuam pendentes.
 - O aplicativo ainda não tem checklist offline, fotos, QR, push ou sincronização. São próximos itens do P1.
 - Sulco, rodízio, inspeções vencidas, estoque mínimo e recapagens têm regras por empresa. Pressão usa a referência inicial 90–120 psi e temperatura usa aviso a partir de 85 °C; parametrização desses dois valores por aplicação ainda está pendente.
 - Estoque, ciclo de vida, rodízio, transferências, recapagem, descarte e alertas automáticos estão implementados para a web/PWA e API; veja [fluxos e limites](TIRE-LIFECYCLE.md). CPK, importação, integrações, relatórios e paridade dessas telas no Flutter continuam pendentes.

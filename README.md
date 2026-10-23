@@ -2,6 +2,8 @@
 
 Gestão de pneus para transportadoras, em pt-BR. Monorepo Go + PostgreSQL, Next.js e Flutter.
 
+Revisão `sppec05`: veja [diagnóstico, correções, checklist comercial e ativação manual](docs/SPPEC05-READINESS.md). Mensalidade por link foi mantida; recorrência foi adiada pelo proprietário. O lançamento comercial ainda depende dos bloqueios documentados.
+
 ## Entrega atual: U0
 
 - Landing responsiva: mapa ilustrativo interativo, calculadora e planos com recursos futuros identificados.
@@ -9,7 +11,7 @@ Gestão de pneus para transportadoras, em pt-BR. Monorepo Go + PostgreSQL, Next.
 - Login com Argon2id, JWT de 15 minutos e refresh token rotativo de 30 dias, armazenado como hash.
 - Web usa um proxy de mesma origem e cookies `httpOnly`, `Secure` em produção e `SameSite=Lax`. Tokens não são expostos ao JavaScript do navegador.
 - Flutter usa Dio, Riverpod, go_router e armazenamento seguro para o refresh token.
-- Veículos, pneus e mapas de cavalo 6x2 e carreta de 3 eixos.
+- Veículos, pneus e mapas com sete categorias e dezoito configurações de eixos/rodado.
 - Estoque, movimentações, rodízio, recapagem, descarte e histórico com custos na web/PWA e API; detalhes em [ciclo de vida](docs/TIRE-LIFECYCLE.md). As telas desses novos fluxos ainda não foram portadas para Flutter.
 - Inspeções técnicas, histórico, classificação determinística e alertas internos; idempotência por empresa e `client_id`.
 - Convites por e-mail para borracheiro/inspetor, verificação e redefinição de senha (exigem Resend configurado).
@@ -70,6 +72,8 @@ O endereço acima é para o emulador Android. Em aparelho físico use o IP local
 
 ## Testes e builds
 
+Use Go 1.26.10 ou superior; o toolchain automático do Go e o Docker de build estão configurados para essa versão corrigida. A CI executa build, testes e auditorias em pushes/PRs; o workflow Neon separado valida persistência em branch isolado.
+
 ```sh
 cd api
 go test ./...
@@ -95,6 +99,6 @@ APK de testes: `mobile/build/app/outputs/flutter-apk/app-debug.apk`. APK debug n
 
 ## Deploy
 
-Consulte [docs/DEPLOY.md](docs/DEPLOY.md). Site/painel: Vercel, com diretório raiz `web`. API contínua: Fly.io. Banco: Neon. A prévia web sozinha não oferece cadastro ou persistência sem `API_URL` apontando para a API publicada.
+Consulte [docs/DEPLOY.md](docs/DEPLOY.md) e [docs/RENDER.md](docs/RENDER.md). Site/painel: Vercel, com diretório raiz `web`. Configuração atual da API: Render/Docker; Fly.io é uma alternativa. Banco: Neon. A prévia web sozinha não oferece cadastro ou persistência sem `API_URL` apontando para a API publicada. Homologação e pagamento de teste devem passar antes de promover produção.
 
 Os arquivos fornecidos pelo usuário foram preservados na raiz e copiados para `docs/`. `sprit-3-prompremane` repete o modelo de dados; não havia HTML de referência da landing. O visual foi criado a partir dos requisitos.
