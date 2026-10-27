@@ -29,7 +29,7 @@ func commercialError(w http.ResponseWriter, err error) bool {
 }
 func (a *App) billingGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" || strings.HasPrefix(r.URL.Path, "/api/v1/billing") || strings.HasPrefix(r.URL.Path, "/api/v1/platform") {
+		if r.Method == "GET" || strings.HasPrefix(r.URL.Path, "/api/v1/billing") || strings.HasPrefix(r.URL.Path, "/api/v1/platform") || strings.HasPrefix(r.URL.Path, "/api/v1/support/") || r.URL.Path == "/api/v1/account/close" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -68,9 +68,12 @@ func (a *App) platformOK(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (a *App) platformMe(w http.ResponseWriter, r *http.Request) {
-	if a.platformOK(w, r) {
-		write(w, 200, map[string]bool{"admin": true})
+	var allowed bool
+	if err := a.db.QueryRow(r.Context(), "select platform_allowed($1)", claims(r).Subject).Scan(&allowed); err != nil {
+		problem(w, 503, "Não foi possível consultar seu acesso.")
+		return
 	}
+	write(w, 200, map[string]bool{"admin": allowed})
 }
 func (a *App) platformDashboard(w http.ResponseWriter, r *http.Request) {
 	if !a.platformOK(w, r) {
@@ -127,6 +130,14 @@ func (a *App) billingStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = json.Unmarshal(raw, &out)
+	_ = t.Rollback(r.Context())
+	rights, err := a.resolveEntitlements(r)
+	if err != nil {
+		problem(w, 503, "Não foi possível verificar os recursos da assinatura.")
+		return
+	}
+	out["effective_plan_id"] = rights.PlanID
+	out["features"] = rights.Features
 	out["payments_enabled"] = asaasFromEnv() != nil
 	out["environment"] = os.Getenv("ASAAS_ENVIRONMENT")
 	write(w, 200, out)
@@ -253,6 +264,10 @@ func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
 	var cents, vehicles, users int
 	if e = t.QueryRow(ctx, "select price_cents,vehicle_limit,user_limit from billing_plans where id=$1 and published", d.Plan).Scan(&cents, &vehicles, &users); e != nil {
 		problem(w, 422, "Plano indisponível.")
+		return
+	}
+	if cents <= 0 {
+		problem(w, 422, "O valor deste plano ainda não foi definido.")
 		return
 	}
 	if currentVehicles > vehicles || currentUsers > users {

@@ -41,11 +41,11 @@ const credentials=JSON.parse(fs.readFileSync(process.env.QA_ACCOUNT_FILE,"utf8")
   await form.getByRole("button",{name:"Salvar",exact:true}).click();
   await page.getByRole("dialog").waitFor({state:"hidden"});
   const tire=(await call("tires")).data.find(t=>t.code==="FOGO-QA-001");assert.ok(tire);assert.equal(tire.serial_number,"SERIAL-QA-001");assert.equal(tire.dot_code,"AB1025");assert.equal(tire.retread_count,1);
-  await page.locator("tr").filter({hasText:"FOGO-QA-001"}).getByRole("button",{name:/Ciclo de vida/}).click();
+  await page.locator("tr").filter({hasText:"FOGO-QA-001"}).getByRole("button",{name:/Dados e histórico/}).click();
   const detail=page.locator(".lifecycle-details");
   await detail.getByText("2ª vida",{exact:true}).waitFor();
-  await detail.getByText("SERIAL-QA-001",{exact:true}).waitFor();
-  await detail.getByText("Motorista Identidade QA",{exact:true}).waitFor();
+  await detail.getByText("SERIAL-QA-001",{exact:false}).waitFor();
+  await detail.getByText("Motorista Identidade QA",{exact:false}).waitFor();
   await detail.locator("summary").filter({hasText:"Editar identificação"}).click();
   await detail.getByLabel("Tipo de via").selectOption("TERRA");
   await detail.getByRole("button",{name:"Salvar identificação",exact:true}).click();
@@ -53,6 +53,7 @@ const credentials=JSON.parse(fs.readFileSync(process.env.QA_ACCOUNT_FILE,"utf8")
   const life=await call(`tires/${tire.id}/lifecycle`);assert.equal(life.tire.road_use,"TERRA");assert.equal(life.movements[0].road_use,"MISTO");assert.equal(life.movements[0].life_number,2);assert.equal(life.movements[0].to_driver_name,driver.name);
   for(const width of [1440,390]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`overflow ${width}`);}
   await page.setViewportSize({width:1440,height:1000});
+  await page.keyboard.press("Escape");
   await page.getByRole("button",{name:"Veículos",exact:true}).click();
   await page.locator(".vehicle-row").filter({hasText:"QAQ1D23"}).first().click();
   const wheel=page.locator('.tire[title*="lado esquerdo"]').filter({hasText:"FOGO-QA-001"});assert.equal(await wheel.count(),1);assert.match(await wheel.innerText(),/1 · 1EE/);

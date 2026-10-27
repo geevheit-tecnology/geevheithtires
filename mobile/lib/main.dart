@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-const navy = Color(0xFF0F1B3D);
+const navy = Color(0xFF293C38);
 final apiProvider = Provider((ref) => TireApi());
 final sessionProvider = FutureProvider((ref) => ref.read(apiProvider).resume());
 final router = GoRouter(
@@ -27,8 +27,16 @@ class GeevheitTireApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: navy),
-      scaffoldBackgroundColor: const Color(0xFFF6F8FB),
+      colorScheme: ColorScheme.fromSeed(seedColor: navy).copyWith(
+        primary: navy,
+        secondary: const Color(0xFF6E8F79),
+        surface: const Color(0xFFFAFAF7),
+      ),
+      textTheme: const TextTheme(
+        bodyMedium: TextStyle(fontSize: 16, height: 1.5),
+        bodySmall: TextStyle(fontSize: 14, height: 1.5),
+      ),
+      scaffoldBackgroundColor: const Color(0xFFF6F6F2),
       appBarTheme: const AppBarTheme(
         backgroundColor: navy,
         foregroundColor: Colors.white,
@@ -217,7 +225,14 @@ class _LoginState extends ConsumerState<LoginPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.tire_repair, size: 64, color: navy),
+                  Center(
+                    child: Image.asset(
+                      'assets/brand-icon.png',
+                      width: 80,
+                      height: 80,
+                      semanticLabel: 'Símbolo GeevheitTire',
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   const Text(
                     'GeevheitTire',
@@ -632,7 +647,7 @@ class ChassisPainter extends CustomPainter {
   ChassisPainter({required this.axles});
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0xFFD9E1ED);
+    final paint = Paint()..color = const Color(0xFFDCE2D9);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(size.width / 2 - 18, 10, 36, size.height - 34),

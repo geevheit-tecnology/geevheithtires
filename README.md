@@ -102,3 +102,7 @@ APK de testes: `mobile/build/app/outputs/flutter-apk/app-debug.apk`. APK debug n
 Consulte [docs/DEPLOY.md](docs/DEPLOY.md) e [docs/RENDER.md](docs/RENDER.md). Site/painel: Vercel, com diretório raiz `web`. Configuração atual da API: Render/Docker; Fly.io é uma alternativa. Banco: Neon. A prévia web sozinha não oferece cadastro ou persistência sem `API_URL` apontando para a API publicada. Homologação e pagamento de teste devem passar antes de promover produção.
 
 Os arquivos fornecidos pelo usuário foram preservados na raiz e copiados para `docs/`. `sprit-3-prompremane` repete o modelo de dados; não havia HTML de referência da landing. O visual foi criado a partir dos requisitos.
+
+## Planos, marca e privilégios
+
+Consulte [a matriz de benefícios e as regras de acesso](docs/PLANOS_E_IDENTIDADE.md). A avaliação usa Starter; recursos Pro são verificados na API. Para sincronizar o catálogo, execute `npm run sync:plans`; confira com `npm run check:plans`.

@@ -42,6 +42,9 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
+	if _, e = admin.Exec(ctx, "update subscriptions set plan_id='pro',paid_until=now()+interval '1 day',vehicle_limit=60,user_limit=10 where company_id=$1", companies[0]); e != nil {
+		t.Fatal(e)
+	}
 	defer func() {
 		for _, c := range companies {
 			_, _ = admin.Exec(ctx, "select set_config('app.company_id',$1,false)", c)
@@ -66,6 +69,7 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 	r.Post("/api/v1/vehicles", a.createVehicle)
 	r.Post("/api/v1/tires", a.createTire)
 	r.Get("/api/v1/tires/{id}/lifecycle", a.tireLifecycle)
+	r.Get("/api/v1/tire-reports", a.tireReports)
 	r.Post("/api/v1/tires/{id}/movements", a.moveTire)
 	r.Post("/api/v1/tires/{id}/inspections", a.inspect)
 	r.Get("/api/v1/vehicles/{id}/tire-map", a.tireMap)
@@ -132,6 +136,13 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 	}
 	move := func(tid, action string, extra map[string]any, want int) map[string]any {
 		body := map[string]any{"client_id": id(), "action": action, "expected_version": snapshot(tid)["version"], "reason": "QA physical operation confirmed"}
+		if action == "REMOVE" || action == "DISCARD" {
+			carcass := "PRESERVADA"
+			if action == "DISCARD" {
+				carcass = "PERDIDA"
+			}
+			body["removal_report"] = map[string]any{"cause": "DESGASTE", "carcass": carcass, "assessment": "Avaliação técnica QA da carcaça.", "responsible": "Técnico QA"}
+		}
 		for k, v := range extra {
 			body[k] = v
 		}
@@ -220,11 +231,39 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 	}
 	move(first, "INSTALL", map[string]any{"vehicle_id": v2, "position": "1EE", "vehicle_km": 1000}, 422)
 	move(first, "RECAP_SEND", map[string]any{"supplier": "Recap QA"}, 422)
+	move(first, "DISCARD", map[string]any{"removal_report": nil}, 422)
 	move(first, "DISCARD", nil, 201)
+	reports := request("GET", "tire-reports?kind=DISCARD", 0, nil, 200)
+	if len(reports["events"].([]any)) != 1 {
+		t.Fatal("discard report missing")
+	}
+	entry := reports["events"].([]any)[0].(map[string]any)
+	if entry["removal_report"].(map[string]any)["carcass"] != "PERDIDA" {
+		t.Fatal("report not preserved")
+	}
+	if len(request("GET", "tire-reports", 1, nil, 200)["events"].([]any)) != 0 {
+		t.Fatal("cross-tenant report leak")
+	}
+	request("GET", "tire-reports", 2, nil, 403)
+	request("GET", "tire-reports?from=invalid", 0, nil, 422)
+	request("GET", "tire-reports?from=2026-12-31&to=2026-01-01", 0, nil, 422)
+	if snapshot(first)["current_life_km"] != float64(0) {
+		t.Fatal("recap life mileage baseline incorrect")
+	}
+
 	move(first, "INSTALL", map[string]any{"vehicle_id": v2, "position": "1EE", "vehicle_km": 1000}, 409)
 	if count("wear", true) != 0 || count("disposal", true) != 0 {
 		t.Fatal("discarded tire kept maintenance alerts")
 	}
+	lossVehicle := vehicle("DDD1E23", 0)
+	lost := create("QA-LOST-CARCASS", false)
+	move(lost, "INSTALL", map[string]any{"vehicle_id": lossVehicle, "position": "1EE", "vehicle_km": 1000}, 201)
+	move(lost, "REMOVE", map[string]any{"source_km": 1200, "removal_report": map[string]any{"cause": "ESTOURO", "carcass": "PERDIDA", "assessment": "Estouro com perda definitiva da carcaça.", "responsible": "Técnico QA"}}, 201)
+	lostSnapshot := snapshot(lost)
+	if lostSnapshot["state"] != "DESCARTADO" || lostSnapshot["total_tracked_km"] != float64(200) {
+		t.Fatal("lost carcass must close tire and mileage")
+	}
+	move(lost, "INSTALL", map[string]any{"vehicle_id": lossVehicle, "position": "1EE", "vehicle_km": 1200}, 409)
 	// Two independent tires race for one slot: one succeeds and the other remains in stock.
 	x, y := create("QA-RACE-X", false), create("QA-RACE-Y", false)
 	var wg sync.WaitGroup
@@ -313,7 +352,12 @@ func TestTireLifecycleAndAutomation(t *testing.T) {
 	if count("expiry", true) < 1 {
 		t.Fatal("expired tire alert missing")
 	}
-	for _,item:=range request("GET","tires",0,nil,200)["data"].([]any) {row:=item.(map[string]any);if row["id"]==legacy && row["status"]!="critico" {t.Fatal("expired tire shown as healthy")}}
+	for _, item := range request("GET", "tires", 0, nil, 200)["data"].([]any) {
+		row := item.(map[string]any)
+		if row["id"] == legacy && row["status"] != "critico" {
+			t.Fatal("expired tire shown as healthy")
+		}
+	}
 	identity["expires_on"] = "2035-12-31"
 	identity["expected_version"] = snapshot(legacy)["version"]
 	request("PATCH", "tires/"+legacy+"/identity", 0, identity, 200)

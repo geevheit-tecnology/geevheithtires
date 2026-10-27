@@ -191,6 +191,15 @@ func (a *App) auth(next http.Handler) http.Handler {
 			problem(w, 401, "Sessão inválida.")
 			return
 		}
+		var active bool
+		if err := a.db.QueryRow(r.Context(), "select auth_account_active($1,$2)", c.Subject, c.Company).Scan(&active); err != nil {
+			problem(w, 503, "Não foi possível verificar a conta.")
+			return
+		}
+		if !active {
+			problem(w, 401, "Conta encerrada ou indisponível. Entre com uma conta ativa.")
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), claimsKey{}, c)))
 	})
 }
@@ -545,7 +554,7 @@ func (a *App) list(w http.ResponseWriter, r *http.Request) {
 	queries := map[string]string{
 		"vehicles": "select to_jsonb(v)||jsonb_build_object('driver_name',(select name from drivers d where d.company_id=v.company_id and d.id=v.driver_id)) from vehicles v where company_id=$1 and deleted_at is null and ($2='' or id::text>$2) order by id limit 51",
 		"drivers":  "select to_jsonb(d) from drivers d where company_id=$1 and ($2='' or id::text>$2) order by id limit 51",
-		"tires":    "select to_jsonb(v)||jsonb_build_object('status',case when expires_on<current_date or structural_damage or tread_mm<coalesce((select critical_mm from tire_policies where company_id=$1),3) then 'critico' when tread_mm<coalesce((select warning_mm from tire_policies where company_id=$1),5) then 'alerta' else 'ok' end) from tires v where company_id=$1 and deleted_at is null and ($2='' or id::text>$2) order by id limit 51",
+		"tires":    "select to_jsonb(v)||jsonb_build_object('status',case when expires_on<current_date or structural_damage or tread_mm<$3 then 'critico' when tread_mm<$4 then 'alerta' else 'ok' end) from tires v where company_id=$1 and deleted_at is null and ($2='' or id::text>$2) order by id limit 51",
 		"alerts":   "select to_jsonb(v) from alerts v where company_id=$1 and resolved_at is null and ($2='' or id::text>$2) order by id limit 51",
 		"users":    "select jsonb_build_object('id',id,'name',name,'email',email,'role',role,'email_verified',email_verified_at is not null) from users where company_id=$1 and deleted_at is null and ($2='' or id::text>$2) order by id limit 51",
 	}
@@ -558,7 +567,16 @@ func (a *App) list(w http.ResponseWriter, r *http.Request) {
 		problem(w, 403, "Acesso restrito à gestão.")
 		return
 	}
-	out, e := rowsJSON(ctx, t, q, claims(r).Company, r.URL.Query().Get("cursor"))
+	args := []any{claims(r).Company, r.URL.Query().Get("cursor")}
+	if resource == "tires" {
+		p, err := policy(ctx, t, claims(r).Company)
+		if err != nil {
+			problem(w, 503, "Não foi possível consultar as regras.")
+			return
+		}
+		args = append(args, p.Critical, p.Warning)
+	}
+	out, e := rowsJSON(ctx, t, q, args...)
 	if e != nil {
 		problem(w, 500, "Não foi possível carregar os registros.")
 		return
@@ -740,7 +758,12 @@ func (a *App) tireMap(w http.ResponseWriter, r *http.Request) {
 		problem(w, 404, "Veículo não encontrado.")
 		return
 	}
-	tires, e := rowsJSON(ctx, t, "select to_jsonb(t)||jsonb_build_object('status',case when expires_on<current_date or structural_damage or tread_mm<coalesce((select critical_mm from tire_policies where company_id=$2),3) then 'critico' when tread_mm<coalesce((select warning_mm from tire_policies where company_id=$2),5) then 'alerta' else 'ok' end) from tires t where vehicle_id=$1 and company_id=$2 and deleted_at is null", vid, claims(r).Company)
+	p, err := policy(ctx, t, claims(r).Company)
+	if err != nil {
+		problem(w, 503, "Não foi possível consultar as regras.")
+		return
+	}
+	tires, e := rowsJSON(ctx, t, "select to_jsonb(t)||jsonb_build_object('status',case when expires_on<current_date or structural_damage or tread_mm<$3 then 'critico' when tread_mm<$4 then 'alerta' else 'ok' end) from tires t where vehicle_id=$1 and company_id=$2 and deleted_at is null", vid, claims(r).Company, p.Critical, p.Warning)
 	if e != nil {
 		problem(w, 500, "Falha ao carregar mapa.")
 		return
@@ -755,8 +778,13 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer t.Rollback(ctx)
+	p, err := policy(ctx, t, claims(r).Company)
+	if err != nil {
+		problem(w, 503, "Não foi possível consultar as regras.")
+		return
+	}
 	var result []byte
-	e = t.QueryRow(ctx, `select jsonb_build_object('vehicles',(select count(*) from vehicles where company_id=$1 and deleted_at is null),'tires',(select count(*) from tires where company_id=$1 and deleted_at is null and state<>'DESCARTADO'),'critical',(select count(*) from tires where company_id=$1 and (expires_on<current_date or structural_damage or tread_mm<coalesce((select critical_mm from tire_policies where company_id=$1),3)) and state in ('INSTALADO','EM_ESTOQUE') and deleted_at is null),'alerts',(select count(*) from alerts where company_id=$1 and not read and resolved_at is null),'company',(select jsonb_build_object('name',name,'status',status,'trial_ends_at',trial_ends_at) from companies where id=$1))`, claims(r).Company).Scan(&result)
+	e = t.QueryRow(ctx, `select jsonb_build_object('vehicles',(select count(*) from vehicles where company_id=$1 and deleted_at is null),'tires',(select count(*) from tires where company_id=$1 and deleted_at is null and state<>'DESCARTADO'),'critical',(select count(*) from tires where company_id=$1 and (expires_on<current_date or structural_damage or tread_mm<$2) and state in ('INSTALADO','EM_ESTOQUE') and deleted_at is null),'alerts',(select count(*) from alerts where company_id=$1 and not read and resolved_at is null),'company',(select jsonb_build_object('name',name,'status',status,'trial_ends_at',trial_ends_at) from companies where id=$1))`, claims(r).Company, p.Critical).Scan(&result)
 	if e != nil {
 		problem(w, 500, "Falha ao carregar indicadores.")
 		return
@@ -836,7 +864,7 @@ func main() {
 			problem(w, 503, "Banco indisponível.")
 			return
 		}
-		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire", "tire_lifecycle_revision": "2"})
+		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire", "tire_lifecycle_revision": "3", "release": "2026-10-27-tire-management"})
 	})
 	r.Post("/api/v1/webhooks/asaas", a.asaasWebhook)
 	r.Route("/api/v1", func(r chi.Router) {
@@ -851,10 +879,12 @@ func main() {
 			r.Post("/auth/accept", a.accept)
 			r.Get("/registration/cnpj/{cnpj}", a.lookupCNPJ)
 			r.Get("/registration/cep/{cep}", a.lookupCEP)
+			r.Get("/plans", a.publicPlans)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(a.auth)
 			r.Use(a.billingGuard)
+			r.Use(a.entitlementContext)
 			r.Get("/me", func(w http.ResponseWriter, r *http.Request) {
 				c := claims(r)
 				var u identity
@@ -872,10 +902,25 @@ func main() {
 				write(w, 200, u)
 			})
 			r.Get("/billing", a.billingStatus)
+			r.Get("/entitlements", a.entitlementStatus)
 			r.Post("/billing/checkout", a.checkout)
 			r.Get("/platform/me", a.platformMe)
 			r.Get("/platform", a.platformDashboard)
 			r.Post("/platform/change", a.platformChange)
+			r.Get("/platform/clients", a.platformClients)
+			r.Get("/platform/clients/{id}", a.platformClientDetail)
+			r.Post("/platform/clients/{id}/access", a.platformClientAccess)
+			r.Post("/platform/clients/{id}/close", a.platformCloseClient)
+			r.Put("/platform/plans/{id}", a.platformConfigurePlan)
+			r.Get("/platform/tickets", a.platformTickets)
+			r.Get("/platform/tickets/{id}", a.platformTicketDetail)
+			r.Patch("/platform/tickets/{id}", a.platformUpdateTicket)
+			r.Get("/support/tickets", a.supportTickets)
+			r.Get("/support/tickets/{id}", a.supportTicketDetail)
+			r.With(a.rate).Post("/support/tickets", a.createSupportTicket)
+			r.With(a.rate).Post("/support/tickets/{id}/messages", a.replySupportTicket)
+			r.Get("/account", a.accountStatus)
+			r.With(a.rate).Post("/account/close", a.closeAccount)
 			r.Get("/dashboard", a.dashboard)
 			r.Get("/company", a.companyProfile)
 			r.Get("/{resource:vehicles|tires|alerts|users|drivers}", a.list)
@@ -888,6 +933,7 @@ func main() {
 			r.Patch("/tires/{id}/identity", a.updateTireIdentity)
 			r.Post("/tires/{id}/movements", a.moveTire)
 			r.Get("/tires/{id}/lifecycle", a.tireLifecycle)
+			r.Get("/tire-reports", a.tireReports)
 			r.Get("/tire-policy", a.getTirePolicy)
 			r.Patch("/tire-policy", a.setTirePolicy)
 			r.Patch("/vehicles/{id}/odometer", a.updateOdometer)

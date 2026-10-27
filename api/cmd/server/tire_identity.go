@@ -12,11 +12,12 @@ import (
 )
 
 type tireIdentityInput struct {
-	Code   string `json:"code"`
-	DOT    string `json:"dot_code"`
-	Serial string `json:"serial_number"`
-	Expiry string `json:"expires_on"`
-	Road   string `json:"road_use"`
+	ManufactureYear int    `json:"manufacture_year"`
+	Code            string `json:"code"`
+	DOT             string `json:"dot_code"`
+	Serial          string `json:"serial_number"`
+	Expiry          string `json:"expires_on"`
+	Road            string `json:"road_use"`
 }
 
 func (d *tireIdentityInput) validate(now time.Time) bool {
@@ -31,6 +32,10 @@ func (d *tireIdentityInput) validate(now time.Time) bool {
 	week, _ := strconv.Atoi(tail[:2])
 	yy, _ := strconv.Atoi(tail[2:])
 	year := 2000 + yy
+	if d.ManufactureYear != 0 && d.ManufactureYear != year {
+		return false
+	}
+	d.ManufactureYear = year
 	if week < 1 || week > 53 || year > now.Year() {
 		return false
 	}

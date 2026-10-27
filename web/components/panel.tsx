@@ -19,6 +19,11 @@ import { Brand } from "./brand";
 import { api } from "./api";
 import BillingPanel from "./billing-panel";
 import TireInventory from "./tire-inventory";
+import SupportCenter from "./support-center";
+import AccountCenter from "./account-center";
+import Link from "next/link";
+import TireReports from "./tire-reports";
+import {PlanAccessProvider, PlanAccess, lockedAccess} from "./plan-access";
 import VehicleConfigurationFields, { VehicleConfiguration } from "./vehicle-configuration-fields";
 import VehicleOdometer from "./vehicle-odometer";
 import { neonClient, neonEnabled } from "./neon-client";
@@ -52,17 +57,24 @@ type Dashboard = {
 };
 type MapData = { vehicle: Vehicle; positions: string[]; tires: Tire[] };
 const nav = [
-  { id: "dashboard", name: "Visão geral", icon: LayoutDashboard },
+  { id: "dashboard", name: "Gestão de pneus", icon: LayoutDashboard },
   { id: "vehicles", name: "Veículos", icon: Truck },
   { id: "tires", name: "Pneus", icon: CircleDot },
+  { id: "reports", name: "Relatórios de pneus", icon: LayoutDashboard },
   { id: "alerts", name: "Alertas", icon: Bell },
   { id: "users", name: "Equipe", icon: Users },
   { id: "drivers", name: "Motoristas", icon: Users },
+  { id: "support", name:"Suporte e bugs", icon:Bell },
+  { id: "account", name:"Minha conta", icon:Users },
   { id: "plan", name: "Plano e cobrança", icon: CreditCard },
 ];
 export default function Panel() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [platformAdmin,setPlatformAdmin]=useState(false);
+  const [supportDraft,setSupportDraft]=useState("");
+  const [access,setAccess] = useState<PlanAccess>(lockedAccess);
+  async function refreshPlan(){setAccess(await api("entitlements"));}
   const [tab, setTab] = useState("dashboard");
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -71,6 +83,7 @@ export default function Panel() {
   const [users, setUsers] = useState<User[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [map, setMap] = useState<MapData | null>(null);
+  const [dossierTireId, setDossierTireId] = useState<string>();
   const [selected, setSelected] = useState<Tire | null>(null);
   const [inspectionClient, setInspectionClient] = useState("");
   const [history, setHistory] = useState<
@@ -140,13 +153,16 @@ export default function Panel() {
     try {
       const u = await api("me");
       setUser(u);
-      const [d, v, t, a, configurations] = await Promise.all([
+      void api("platform/me").then(out=>setPlatformAdmin(out.admin===true)).catch(()=>setPlatformAdmin(false));
+      const [d, v, t, a, configurations,rights] = await Promise.all([
         api("dashboard"),
         all("vehicles"),
         all("tires"),
         all("alerts"),
         api("vehicle-configurations"),
+        api("entitlements"),
       ]);
+      setAccess(rights);
       setConfigurations(configurations.data);
       setDash(d);
       setVehicles(v);
@@ -164,7 +180,7 @@ export default function Panel() {
     void load();
   }, []);
   useEffect(()=>{
-    const timer=setInterval(()=>{if(document.visibilityState!=="visible")return;void Promise.all([api("dashboard"),all("alerts")]).then(([d,a])=>{setDash(d);setAlerts(a)}).catch(()=>{})},60000);
+    const timer=setInterval(()=>{if(document.visibilityState!=="visible")return;void Promise.all([api("dashboard"),all("alerts"),api("entitlements")]).then(([d,a,rights])=>{setDash(d);setAlerts(a);setAccess(rights)}).catch(()=>{})},60000);
     return()=>clearInterval(timer);
   },[]);
   async function openMap(v: Vehicle) {
@@ -199,6 +215,7 @@ export default function Panel() {
       data.tread_mm = Number(data.tread_mm);
       data.acquisition_cost = Number(data.acquisition_cost);
       data.retread_count = Number(data.retread_count);
+      data.manufacture_year = Number(data.manufacture_year);
       if (!data.vehicle_id) {
         delete data.vehicle_id;
         delete data.position;
@@ -245,6 +262,7 @@ export default function Panel() {
     }
   }
   return (
+    <PlanAccessProvider access={access} viewPlans={()=>setTab("plan")} refresh={refreshPlan}>
     <div className="panel">
       <aside className="sidebar">
         <Brand />
@@ -252,12 +270,12 @@ export default function Panel() {
           <span>{dash?.company.name?.slice(0, 1) || "G"}</span>
           <div>
             <b>{dash?.company.name || "Sua empresa"}</b>
-            <small>Gestão de frota</small>
+            <small>Controle de pneus e frota</small>
           </div>
         </div>
         <nav>
           {nav
-            .filter((n) => !["users","drivers"].includes(n.id) || manage)
+            .filter((n) => (!["users","drivers"].includes(n.id) || manage) && (n.id!=="reports" || manage || user?.role==="tire_tech"))
             .map((n) => (
               <button
                 className={tab === n.id ? "active" : ""}
@@ -274,6 +292,7 @@ export default function Panel() {
                 )}
               </button>
             ))}
+          {platformAdmin&&<Link className="admin-entry" href="/admin">Administração da plataforma →</Link>}
         </nav>
         <div className="sidebar-bottom">
           <span className="trial-label">
@@ -303,7 +322,7 @@ export default function Panel() {
         <main className="panel-content">
           <div className="panel-title">
             <div>
-              <span className="label">SUA OPERAÇÃO EM MOVIMENTO</span>
+              <span className="label">CONTROLE DE PNEUS • FROTA • MANUTENÇÃO</span>
               <h1>
                 {tab === "dashboard"
                   ? `Olá, ${user?.name?.split(" ")[0] || "gestor"}.`
@@ -311,8 +330,8 @@ export default function Panel() {
               </h1>
               <p>
                 {tab === "dashboard"
-                  ? "Acompanhe o que precisa da sua atenção hoje."
-                  : "Informações da sua empresa, sempre no mesmo lugar."}
+                  ? "Controle o estoque, acompanhe o desgaste e programe a manutenção."
+                  : ({vehicles: "Cadastre a frota e acompanhe os pneus por eixo e posição.", tires: access.features.advanced_lifecycle?"Gerencie identificação, estoque, instalação, rodízio e recapagens.":"Organize o estoque e consulte dados, km e histórico de cada pneu.", reports:"Consulte ocorrências e os recursos de análise disponíveis no seu plano.", alerts: "Avalie desgaste, validade e ocorrências que exigem manutenção.", users: "Convide os profissionais e defina seus perfis de acesso.", drivers: "Cadastre os motoristas e vincule os responsáveis aos veículos.", plan: "Consulte os limites da operação e a situação da assinatura."}[tab] || "Acompanhe a gestão de pneus da sua empresa.")}
               </p>
             </div>
             <button
@@ -325,7 +344,7 @@ export default function Panel() {
           </div>
           {error && (
             <div role="alert" className="error">
-              {error}
+              {error}<button className="table-link" onClick={()=>{setSupportDraft(`Erro observado: ${error}\nMódulo: ${tab}\nDescreva os passos para reproduzir:`);setTab("support");setError("")}}>Reportar este erro</button>
             </div>
           )}
           {notice && (
@@ -336,9 +355,18 @@ export default function Panel() {
               </button>
             </div>
           )}
+          {loaded&&<div className="plan-context"><span className="plan-level">{access.plan_name}</span><span>{access.status==="trial"?"Avaliação com recursos Starter":access.can_write?"Recursos do seu plano":"Acesso para consulta"} · até {access.vehicle_limit} veículos e {access.user_limit} usuários</span><button className="table-link" onClick={()=>setTab("plan")}>Ver benefícios</button></div>}
           {!loaded && !error && <p>Carregando sua operação…</p>}
           {tab === "dashboard" && (
             <>
+              {manage && loaded && <section className="registration-actions" aria-label="Cadastros da gestão de pneus">
+                <div><span className="label">CADASTROS DA OPERAÇÃO</span><h2>Do estoque à estrada</h2><p>Abra o cadastro, preencha os dados e salve para incluir na operação.</p></div>
+                <div className="registration-buttons">
+                  <button className="button" onClick={() => setModal("tires")}><CircleDot size={19}/>Cadastrar pneu<Plus size={17}/></button>
+                  <button className="button outline" onClick={() => setModal("vehicles")}><Truck size={19}/>Cadastrar veículo<Plus size={17}/></button>
+                  <button className="button outline" onClick={() => setTab("drivers")}><Users size={19}/>Cadastrar motorista<ArrowUpRight size={17}/></button>
+                </div>
+              </section>}
               <div className="stats">
                 {[
                   {
@@ -551,7 +579,7 @@ export default function Panel() {
                       <TireMap
                         positions={map.positions}
                         tires={map.tires}
-                        onSelect={select}
+                        onSelect={t => setDossierTireId(t.id)}
                       />
                     </>
                   ) : (
@@ -565,6 +593,10 @@ export default function Panel() {
               </div>
             </>
           )}
+          {dossierTireId && <TireInventory tires={tires} vehicles={vehicles} role={user?.role||""} onChange={async()=>{await load();if(map)setMap(await api(`vehicles/${map.vehicle.id}/tire-map`))}} onInspect={t=>void select(t)} tireId={dossierTireId} onClose={()=>setDossierTireId(undefined)}/>}
+          {tab === "support"&&<SupportCenter draft={supportDraft}/>}
+          {tab === "account"&&<AccountCenter/>}
+          {tab === "reports" && (manage||user?.role==="tire_tech") && <TireReports onOpen={setDossierTireId}/>}
           {tab === "tires" && (
             <>
               <div className="list-toolbar">
@@ -695,6 +727,7 @@ export default function Panel() {
               </button>
             </div>
             <form onSubmit={submit}>
+              <p className="form-intro">{modal === "tires" ? "Preencha a identificação, as medidas e a condição de entrada. Ao final, escolha entre manter no estoque ou instalar em um veículo." : modal === "vehicles" ? "Informe a identificação, selecione o tipo e confira os eixos antes de salvar o veículo." : modal === "users" ? "Informe os dados e o perfil do profissional para enviar o convite de acesso." : "Registre as medições do pneu para atualizar sua condição e as recomendações de manutenção."}</p>
               {modal === "vehicles" && (
                 <>
                   <label>
@@ -730,6 +763,7 @@ export default function Panel() {
               )}
               {modal === "tires" && (
                 <>
+                  <fieldset className="registration-fields"><legend>Identificação e condição de entrada</legend>
                   <div className="form-grid">
                     <label>
                       Número de fogo
@@ -784,6 +818,8 @@ export default function Panel() {
                       />
                     </label>
                   </div>
+                  </fieldset>
+                  <fieldset className="registration-fields"><legend>Destino do pneu</legend>
                   <label>
                     Instalar em veículo (opcional)
                     <select
@@ -826,6 +862,7 @@ export default function Panel() {
                       <option value="">Selecione um veículo</option>
                     </select>
                   </label>
+                  </fieldset>
                 </>
               )}
               {modal === "users" && (
@@ -919,6 +956,7 @@ export default function Panel() {
         </div>
       )}
     </div>
+    </PlanAccessProvider>
   );
 }
 function Shield() {

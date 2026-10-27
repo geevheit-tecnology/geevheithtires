@@ -41,3 +41,19 @@ func TestTireIdentityValidation(t *testing.T) {
 		t.Fatal("expired intake for stock must remain possible")
 	}
 }
+
+func TestManufactureYearMatchesDOT(t *testing.T) {
+	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	d := tireIdentityInput{Code: "P001", Serial: "S001", DOT: "1025", Expiry: "2030-01-01", Road: "MISTO", ManufactureYear: 2024}
+	if d.validate(now) {
+		t.Fatal("accepted year conflicting with DOT")
+	}
+	d.ManufactureYear = 2025
+	if !d.validate(now) {
+		t.Fatal("rejected matching manufacturing year")
+	}
+	d.ManufactureYear = 0
+	if !d.validate(now) || d.ManufactureYear != 2025 {
+		t.Fatal("legacy DOT must derive manufacturing year")
+	}
+}

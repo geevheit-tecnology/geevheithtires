@@ -13,6 +13,7 @@ export type Tire = {
   version?: number;
   stock_location?: string;
   serial_number?: string | null;
+  manufacture_year?: number | null;
   dot_code?: string | null;
   expires_on?: string | null;
   road_use?: string;

@@ -11,6 +11,8 @@
     "start": "npm --prefix web run start --",
     "api:neon": "node --env-file=.env.local scripts/api-neon.mjs",
     "migrate:neon": "node --env-file=.env.local scripts/api-neon.mjs migrate",
-    "test:neon": "node --env-file=.env.local scripts/api-neon.mjs test"
+    "test:neon": "node --env-file=.env.local scripts/api-neon.mjs test",
+    "check:plans": "node scripts/sync-plan-catalog.mjs --check",
+    "sync:plans": "node scripts/sync-plan-catalog.mjs"
   }
 }

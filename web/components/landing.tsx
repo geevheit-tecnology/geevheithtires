@@ -16,6 +16,8 @@ import {
   CircleDot,
   BarChart3,
 } from "lucide-react";
+import {planCatalog} from "../lib/plan-catalog";
+import {PlanBenefits} from "./plan-access";
 import { Brand } from "./brand";
 import { TireMap, Tire } from "./tire-map";
 const positions = [
@@ -39,6 +41,8 @@ const demo: Tire[] = positions.map((position, i) => ({
   status: i === 4 ? "critico" : i === 7 ? "alerta" : "ok",
 }));
 export default function Home() {
+  const [offers,setOffers]=useState<(typeof planCatalog[number]&{display_price_cents?:number})[]>(planCatalog);
+  useEffect(()=>{let active=true;fetch("/api/backend/plans").then(r=>r.ok?r.json():null).then(out=>{if(active&&Array.isArray(out?.plans))setOffers(out.plans)}).catch(()=>{});return()=>{active=false}},[]);
   const landingRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -309,7 +313,7 @@ export default function Home() {
                 artificial estão previstos para as próximas etapas.
               </p>
               <a href="#planos">
-                Ver os planos previstos <ArrowUpRight size={18} />
+                Ver os benefícios dos planos <ArrowUpRight size={18} />
               </a>
             </article>
           </div>
@@ -391,42 +395,7 @@ export default function Home() {
             </p>
           </div>
           <div className="plans">
-            {[
-              {
-                name: "Starter",
-                price: "0,00",
-                desc: "O primeiro passo para organizar sua frota.",
-                items: [
-                  "Até 15 veículos",
-                  "3 usuários",
-                  "Estoque e ciclo de vida",
-                  "Mapa de pneus e inspeções",
-                  "Alertas automáticos",
-                ],
-              },
-              {
-                name: "Pro",
-                price: "0,00",
-                desc: "Mais profundidade para sua operação.",
-                items: [
-                  "Até 60 veículos e 10 usuários",
-                  "Gestão de estoque e ciclo de vida",
-                  "Custo por km, IA e relatórios (previstos)",
-                  "Gestão de até 3 filiais (prevista)",
-                ],
-              },
-              {
-                name: "Enterprise",
-                price: "0,00",
-                desc: "Para operações que precisam ir além.",
-                items: [
-                  "Limites sob consulta",
-                  "Integrações (previstas)",
-                  "API e webhooks (previstos)",
-                  "Atendimento a combinar",
-                ],
-              },
-            ].map((p, i) => (
+            {offers.map((p, i) => (
               <article
                 className={`plan ${i === 1 ? "featured" : ""}`}
                 key={p.name}
@@ -435,25 +404,20 @@ export default function Home() {
                   <span className="plan-tag">PARA FROTAS EM CRESCIMENTO</span>
                 )}
                 <span className="label">{p.name}</span>
-                <p>{p.desc}</p>
+                <p>{p.summary}</p>
                 <div className="price">
-                  <span>R$</span> {p.price}
+                  <span>R$</span> {((p.display_price_cents||0)/100).toLocaleString("pt-BR",{minimumFractionDigits:2})}
                   <small>{" / mês"}</small>
                 </div>
                 <Link
                   href="/cadastro"
                   className={`button ${i === 1 ? "" : "outline"}`}
                 >
-                  Experimentar a plataforma <ArrowUpRight size={16} />
+                  Avaliar o Starter <ArrowUpRight size={16} />
                 </Link>
-                <ul>
-                  {p.items.map((s) => (
-                    <li key={s}>
-                      <Check size={16} />
-                      {s}
-                    </li>
-                  ))}
-                </ul>
+                <p className="plan-quota">{p.vehicle_limit?`Até ${p.vehicle_limit} veículos e ${p.user_limit} usuários`:"Limites e atendimento sob consulta"}</p>
+                <PlanBenefits features={p.features} planned={p.planned}/>
+
               </article>
             ))}
           </div>
@@ -482,7 +446,7 @@ export default function Home() {
               ],
               [
                 "Todos os recursos dos planos já estão disponíveis?",
-                "O controle de estoque, o ciclo de vida dos pneus, as inspeções e os alertas internos estão disponíveis no site. Os pagamentos ainda precisam ser ativados. Os recursos indicados como previstos e o funcionamento completo sem internet serão disponibilizados em etapas futuras.",
+                "A avaliação usa os recursos Starter: operação essencial, inspeções, alertas e relatórios limitados. Recapagens, relatórios avançados, comparação de marcas e regras personalizadas exigem Pro ou Enterprise. Os pagamentos ainda precisam ser ativados. Os recursos indicados como previstos e o funcionamento completo sem internet serão disponibilizados em etapas futuras.",
               ],
             ].map(([q, a]) => (
               <details key={q}>
@@ -509,7 +473,7 @@ export default function Home() {
           </Link>
         </section>
       </main>
-      <footer className="container footer">
+      <footer className="container footer"><Link href="/admin/login">Acesso administrativo</Link>
         <Brand />
         <span>Desenvolvido por 2026@ Geevheit Software Solution</span>
         <Link href="/termos">Termos de Uso</Link>

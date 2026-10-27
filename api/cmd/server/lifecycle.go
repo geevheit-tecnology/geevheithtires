@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"geevheittire/api/internal/commercial"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -24,6 +25,14 @@ type tirePolicy struct {
 
 func policy(ctx context.Context, t pgx.Tx, company string) (tirePolicy, error) {
 	p := tirePolicy{5, 3, 10000, 30, 2, 2}
+	var plan string
+	var active bool
+	if err := t.QueryRow(ctx, "select coalesce(plan_id,''),not suspended and coalesce(paid_until>now(),false) from subscriptions where company_id=$1", company).Scan(&plan, &active); err != nil {
+		return p, err
+	}
+	if !active || !commercial.Capabilities(plan)["custom_policies"] {
+		return p, nil
+	}
 	e := t.QueryRow(ctx, "select warning_mm,critical_mm,rotation_km,inspection_days,minimum_stock,max_retreads from tire_policies where company_id=$1", company).Scan(&p.Warning, &p.Critical, &p.Rotation, &p.InspectionDays, &p.MinimumStock, &p.MaxRetreads)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return p, nil
@@ -50,6 +59,9 @@ func (a *App) getTirePolicy(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, p)
 }
 func (a *App) setTirePolicy(w http.ResponseWriter, r *http.Request) {
+	if !a.requireFeature(w, r, "custom_policies") {
+		return
+	}
 	if !canManage(claims(r)) {
 		problem(w, 403, "Acesso restrito à gestão.")
 		return
@@ -90,20 +102,21 @@ func (a *App) setTirePolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 type movementInput struct {
-	Client        string   `json:"client_id"`
-	Action        string   `json:"action"`
-	Version       int64    `json:"expected_version"`
-	Vehicle       string   `json:"vehicle_id"`
-	Position      string   `json:"position"`
-	SourceKM      *int     `json:"source_km"`
-	DestinationKM *int     `json:"vehicle_km"`
-	Swap          string   `json:"swap_tire_id"`
-	SwapVersion   int64    `json:"swap_version"`
-	Reason        string   `json:"reason"`
-	Location      string   `json:"stock_location"`
-	Supplier      string   `json:"supplier"`
-	Cost          int      `json:"cost_cents"`
-	Tread         *float64 `json:"new_tread_mm"`
+	Report        *removalReport `json:"removal_report,omitempty"`
+	Client        string         `json:"client_id"`
+	Action        string         `json:"action"`
+	Version       int64          `json:"expected_version"`
+	Vehicle       string         `json:"vehicle_id"`
+	Position      string         `json:"position"`
+	SourceKM      *int           `json:"source_km"`
+	DestinationKM *int           `json:"vehicle_km"`
+	Swap          string         `json:"swap_tire_id"`
+	SwapVersion   int64          `json:"swap_version"`
+	Reason        string         `json:"reason"`
+	Location      string         `json:"stock_location"`
+	Supplier      string         `json:"supplier"`
+	Cost          int            `json:"cost_cents"`
+	Tread         *float64       `json:"new_tread_mm"`
 }
 type tireSnapshot struct {
 	ID, Code, State, Location string
@@ -140,7 +153,7 @@ func vehicleOdo(ctx context.Context, t pgx.Tx, company, vid string, km *int) (in
 	_, e = t.Exec(ctx, "update vehicles set current_km=$3,updated_at=now() where company_id=$1 and id=$2", company, vid, *km)
 	return *km, e
 }
-func event(ctx context.Context, t pgx.Tx, c *Claims, before, after tireSnapshot, client, action, reason, supplier string, cost int, source, dest *int) error {
+func event(ctx context.Context, t pgx.Tx, c *Claims, before, after tireSnapshot, client, action, reason, supplier string, cost int, source, dest *int, reports ...*removalReport) error {
 	var actor any
 	if c.Subject != "" {
 		actor = c.Subject
@@ -149,7 +162,12 @@ func event(ctx context.Context, t pgx.Tx, c *Claims, before, after tireSnapshot,
 	if client != "" {
 		operation = client
 	}
-	_, e := t.Exec(ctx, `insert into tire_movements(id,company_id,tire_id,actor_id,client_id,action,from_state,to_state,from_vehicle_id,from_position,to_vehicle_id,to_position,source_km,destination_km,tracked_km,stock_location,reason,supplier,cost_cents,tread_mm,life_number,road_use,from_driver_name,to_driver_name) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,(select d.name from vehicles v join drivers d on d.company_id=v.company_id and d.id=v.driver_id where v.company_id=$2 and v.id=$9),(select d.name from vehicles v join drivers d on d.company_id=v.company_id and d.id=v.driver_id where v.company_id=$2 and v.id=$11))`, id(), c.Company, after.ID, actor, operation, action, before.State, after.State, before.Vehicle, before.Position, after.Vehicle, after.Position, source, dest, after.KM, after.Location, reason, supplier, cost, after.Tread, after.Retreads+1, after.Road)
+	var report any
+	if len(reports) > 0 && reports[0] != nil {
+		raw, _ := json.Marshal(reports[0])
+		report = raw
+	}
+	_, e := t.Exec(ctx, `insert into tire_movements(id,company_id,tire_id,actor_id,client_id,action,from_state,to_state,from_vehicle_id,from_position,to_vehicle_id,to_position,source_km,destination_km,tracked_km,stock_location,reason,supplier,cost_cents,tread_mm,life_number,road_use,from_driver_name,to_driver_name,removal_report) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,(select d.name from vehicles v join drivers d on d.company_id=v.company_id and d.id=v.driver_id where v.company_id=$2 and v.id=$9),(select d.name from vehicles v join drivers d on d.company_id=v.company_id and d.id=v.driver_id where v.company_id=$2 and v.id=$11),$23)`, id(), c.Company, after.ID, actor, operation, action, before.State, after.State, before.Vehicle, before.Position, after.Vehicle, after.Position, source, dest, after.KM, after.Location, reason, supplier, cost, after.Tread, after.Retreads+1, after.Road, report)
 	return e
 }
 func rollingTire(s tireSnapshot) bool {
@@ -171,11 +189,18 @@ func (a *App) moveTire(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &d) {
 		return
 	}
+	if (d.Action == "RECAP_SEND" || d.Action == "RECAP_RETURN" || d.Action == "STOCK_TRANSFER") && !a.requireFeature(w, r, "advanced_lifecycle") {
+		return
+	}
 	d.Reason = strings.TrimSpace(d.Reason)
 	d.Location = strings.TrimSpace(d.Location)
 	d.Supplier = strings.TrimSpace(d.Supplier)
 	if uuid.Validate(tid) != nil || uuid.Validate(d.Client) != nil || d.Version < 1 || len(d.Reason) < 5 || len(d.Reason) > 500 || len(d.Location) > 100 || len(d.Supplier) > 150 || d.Cost < 0 || d.Cost > 100000000 {
 		problem(w, 422, "Confira identificadores, versão, motivo (5 a 500 caracteres) e custo.")
+		return
+	}
+	if !d.validateReport() {
+		problem(w, 422, "Retirada e descarte exigem laudo: ocorrência, condição da carcaça, avaliação (10 a 3000 caracteres) e responsável. Descarte exige carcaça perdida.")
 		return
 	}
 	payload, _ := json.Marshal(struct {
@@ -357,6 +382,9 @@ func (a *App) moveTire(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			after.State = "EM_ESTOQUE"
+			if d.Report.Carcass == "PERDIDA" {
+				after.State = "DESCARTADO"
+			}
 		case "STOCK_TRANSFER":
 			if before.State != "EM_ESTOQUE" || d.Location == before.Location {
 				problem(w, 422, "Selecione um local de estoque diferente para um pneu em estoque.")
@@ -412,7 +440,7 @@ func (a *App) moveTire(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if e = saveTire(ctx, t, c.Company, after); e == nil {
-		e = event(ctx, t, c, before, after, d.Client, d.Action, d.Reason, d.Supplier, d.Cost, source, dest)
+		e = event(ctx, t, c, before, after, d.Client, d.Action, d.Reason, d.Supplier, d.Cost, source, dest, d.Report)
 	}
 	if e == nil {
 		e = a.audit(ctx, t, c, "tire_movement", tid, d)
@@ -448,7 +476,7 @@ func (a *App) tireLifecycle(w http.ResponseWriter, r *http.Request) {
 	defer t.Rollback(r.Context())
 	ctx := r.Context()
 	var summary json.RawMessage
-	e = t.QueryRow(ctx, `select to_jsonb(t)||jsonb_build_object('plate',v.plate,'driver_name',(select d.name from drivers d where d.company_id=t.company_id and d.id=v.driver_id),'current_vehicle_km',v.current_km,'total_tracked_km',t.tracked_km+case when t.vehicle_id is not null and t.position not like 'STEP%' then greatest(0,v.current_km-t.mounted_at_km) else 0 end,'movement_cost_cents',coalesce((select sum(cost_cents) from tire_movements m where m.company_id=t.company_id and m.tire_id=t.id),0)) from tires t left join vehicles v on v.company_id=t.company_id and v.id=t.vehicle_id where t.company_id=$1 and t.id=$2 and t.deleted_at is null`, claims(r).Company, tid).Scan(&summary)
+	e = t.QueryRow(ctx, `select to_jsonb(t)||jsonb_build_object('plate',v.plate,'driver_name',(select d.name from drivers d where d.company_id=t.company_id and d.id=v.driver_id),'current_vehicle_km',v.current_km,'total_tracked_km',t.tracked_km+case when t.vehicle_id is not null and t.position not like 'STEP%' then greatest(0,v.current_km-t.mounted_at_km) else 0 end,'current_life_km',t.tracked_km+case when t.vehicle_id is not null and t.position not like 'STEP%' then greatest(0,v.current_km-t.mounted_at_km) else 0 end-coalesce((select max(m.tracked_km) from tire_movements m where m.company_id=t.company_id and m.tire_id=t.id and m.action='RECAP_RETURN'),0),'movement_cost_cents',coalesce((select sum(cost_cents) from tire_movements m where m.company_id=t.company_id and m.tire_id=t.id),0)) from tires t left join vehicles v on v.company_id=t.company_id and v.id=t.vehicle_id where t.company_id=$1 and t.id=$2 and t.deleted_at is null`, claims(r).Company, tid).Scan(&summary)
 	if e != nil {
 		problem(w, 404, "Pneu não encontrado.")
 		return
@@ -458,7 +486,7 @@ func (a *App) tireLifecycle(w http.ResponseWriter, r *http.Request) {
 		problem(w, 422, "Cursor inválido.")
 		return
 	}
-	movements, e := rowsJSON(ctx, t, `select to_jsonb(m)||jsonb_build_object('actor_name',u.name,'from_plate',fv.plate,'to_plate',tv.plate) from tire_movements m left join users u on u.company_id=m.company_id and u.id=m.actor_id left join vehicles fv on fv.company_id=m.company_id and fv.id=m.from_vehicle_id left join vehicles tv on tv.company_id=m.company_id and tv.id=m.to_vehicle_id where m.company_id=$1 and m.tire_id=$2 and ($3='' or (m.created_at,m.id)<(select created_at,id from tire_movements where company_id=$1 and tire_id=$2 and id=nullif($3,'')::uuid)) order by m.created_at desc,m.id desc limit 51`, claims(r).Company, tid, cursor)
+	movements, e := rowsJSON(ctx, t, `select to_jsonb(m)||jsonb_build_object('life_km',m.tracked_km-coalesce((select max(b.tracked_km) from tire_movements b where b.company_id=m.company_id and b.tire_id=m.tire_id and b.action='RECAP_RETURN' and (b.created_at,b.id)<=(m.created_at,m.id)),0),'actor_name',u.name,'from_plate',fv.plate,'to_plate',tv.plate) from tire_movements m left join users u on u.company_id=m.company_id and u.id=m.actor_id left join vehicles fv on fv.company_id=m.company_id and fv.id=m.from_vehicle_id left join vehicles tv on tv.company_id=m.company_id and tv.id=m.to_vehicle_id where m.company_id=$1 and m.tire_id=$2 and ($3='' or (m.created_at,m.id)<(select created_at,id from tire_movements where company_id=$1 and tire_id=$2 and id=nullif($3,'')::uuid)) order by m.created_at desc,m.id desc limit 51`, claims(r).Company, tid, cursor)
 	if e != nil {
 		problem(w, 500, "Não foi possível carregar o ciclo de vida.")
 		return

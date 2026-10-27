@@ -3,8 +3,8 @@
   "short_name": "GeevheitTire",
   "start_url": "/app",
   "display": "standalone",
-  "background_color": "#0B1F3A",
-  "theme_color": "#0B1F3A",
+  "background_color": "#293c38",
+  "theme_color": "#293c38",
   "icons": [
     {
       "src": "/icon-192.png",

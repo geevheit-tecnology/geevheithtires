@@ -86,6 +86,9 @@ func (a *App) refreshMaintenance(ctx context.Context, t pgx.Tx, company string) 
 				add("disposal", "limite de recapagens configurado atingido e sulco reduzido. Avaliar retirada e destinação técnica.", "alerta")
 			}
 		}
+		if state == "INSTALADO" && sinceRotation < p.Rotation && sinceRotation >= p.Rotation*9/10 {
+			add("rotation", fmt.Sprintf("rodízio próximo: faltam %d km para o intervalo configurado de %d km. Planejar parada.", p.Rotation-sinceRotation, p.Rotation), "alerta")
+		}
 		if state == "INSTALADO" && sinceRotation >= p.Rotation {
 			add("rotation", fmt.Sprintf("rodízio previsto após %d km desde a instalação/último rodízio (intervalo %d km).", sinceRotation, p.Rotation), "alerta")
 		}
@@ -108,6 +111,37 @@ func (a *App) refreshMaintenance(ctx context.Context, t pgx.Tx, company string) 
 		if n < p.MinimumStock {
 			desired = append(desired, maintenanceAlert{"stock:" + size, "stock_low", "", fmt.Sprintf("Estoque baixo de %s: %d pneu(s) disponível(is), mínimo configurado %d. Planejar reposição.", size, n, p.MinimumStock), "alerta"})
 		}
+	}
+
+	// A comparative cost signal uses known costs and comparable tracked application.
+	// Four tires means at least three peers; this is a review prompt, not a verdict.
+	costs, err := t.Query(ctx, `with assets as (
+  select t.id,t.code,t.state,upper(trim(t.size)) size,t.road_use,t.retread_count,
+  t.tracked_km+case when t.state='INSTALADO' and t.position not like 'STEP%' then greatest(0,v.current_km-t.mounted_at_km) else 0 end km,
+  t.acquisition_cost+coalesce((select sum(m.cost_cents)/100.0 from tire_movements m where m.company_id=t.company_id and m.tire_id=t.id),0) cost
+  from tires t left join vehicles v on v.company_id=t.company_id and v.id=t.vehicle_id
+  where t.company_id=$1 and t.deleted_at is null and t.initial_retread_count=0 and t.acquisition_cost>0 and t.state in ('INSTALADO','EM_ESTOQUE')
+ ), comparable as (
+  select *,count(*) over g samples,sum(cost) over g group_cost,sum(km) over g group_km
+  from assets where km>=1000 window g as(partition by size,road_use,state,retread_count)
+ ) select id,code,cost/km,(group_cost-cost)/nullif(group_km-km,0) reference
+ from comparable where samples>=4 and cost/km>1.25*(group_cost-cost)/nullif(group_km-km,0)`, company)
+	if err != nil {
+		return err
+	}
+	for costs.Next() {
+		var tid, code string
+		var cpk, reference float64
+		if err = costs.Scan(&tid, &code, &cpk, &reference); err != nil {
+			costs.Close()
+			return err
+		}
+		desired = append(desired, maintenanceAlert{"cpk_high:" + tid, "cpk_high", tid, fmt.Sprintf("%s: CPK R$ %.4f/km mais de 25%% acima dos demais pneus comparáveis (R$ %.4f/km). Revisar custos, km e aplicação; pneus em uso têm CPK provisório.", code, cpk, reference), "alerta"})
+	}
+	err = costs.Err()
+	costs.Close()
+	if err != nil {
+		return err
 	}
 	active := make([]string, 0, len(desired))
 	for _, item := range desired {

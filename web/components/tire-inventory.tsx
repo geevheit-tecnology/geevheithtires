@@ -3,7 +3,9 @@ import { FormEvent, useEffect, useState, useRef } from "react";
 import { api } from "./api";
 import { Tire } from "./tire-map";
 import {TireIdentityEditor,roadNames} from "./tire-identity-fields";
+import {usePlanAccess,UpgradeNotice} from "./plan-access";
 import {positionLabel} from "../lib/tire-position";
+import {RemovalReportFields, RemovalReportView, RemovalReport} from "./tire-removal-report";
 type Vehicle = { id: string; plate: string; current_km: number };
 type Asset = Tire & {
   vehicle_id?: string;
@@ -11,6 +13,7 @@ type Asset = Tire & {
   stock_location: string;
   tracked_km: number;
   total_tracked_km: number;
+  current_life_km: number;
   retread_count: number;
   acquisition_cost: number;
   movement_cost_cents: number;
@@ -20,6 +23,7 @@ type Asset = Tire & {
   initial_retread_count?: number;
 };
 type Movement = {
+  removal_report?: RemovalReport;
   id: string;
   action: string;
   created_at: string;
@@ -32,6 +36,7 @@ type Movement = {
   source_km: number | null;
   destination_km: number | null;
   tracked_km: number;
+  life_km?: number;
   stock_location: string;
   reason: string;
   supplier: string;
@@ -63,7 +68,7 @@ const actions: Record<string, string> = {
   BASELINE: "Situação ao iniciar rastreamento",
   INSTALL: "Instalar no veículo",
   STOCK_TRANSFER: "Transferir local no estoque",
-  REMOVE: "Retirar para estoque",
+  REMOVE: "Retirar / avaliar carcaça",
   TRANSFER: "Transferir de veículo",
   ROTATE: "Rodízio / troca de posições",
   RECAP_SEND: "Enviar para recapagem",
@@ -80,6 +85,8 @@ function TirePolicy({
   manage: boolean;
   onChange: () => Promise<void>;
 }) {
+  const {access}=usePlanAccess();
+  const mayEdit=manage&&access.features.custom_policies&&access.can_write;
   const [p, setP] = useState<Policy | null>(null),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
@@ -112,6 +119,7 @@ function TirePolicy({
         aplicação e a avaliação técnica da frota. Os avisos não executam trocas
         nem descartes.
       </p>
+      {manage&&!access.features.custom_policies&&<UpgradeNotice feature="custom_policies"/>}
       {message && <p role="status">{message}</p>}
       {p && (
         <form onSubmit={submit}>
@@ -135,13 +143,13 @@ function TirePolicy({
                   max={max}
                   step={step}
                   defaultValue={p[key]}
-                  disabled={!manage}
+                  disabled={!mayEdit}
                   required
                 />
               </label>
             ))}
           </div>
-          {manage && (
+          {mayEdit && (
             <button className="button small" disabled={busy}>
               {busy ? "Recalculando…" : "Salvar regras"}
             </button>
@@ -157,13 +165,19 @@ export default function TireInventory({
   role,
   onChange,
   onInspect,
+  tireId,
+  onClose,
 }: {
+  tireId?: string;
+  onClose?: () => void;
   tires: Tire[];
   vehicles: Vehicle[];
   role: string;
   onChange: () => Promise<void>;
   onInspect: (t: Tire) => void;
 }) {
+  const {access}=usePlanAccess();
+  const premiumAction=(action:string)=>["STOCK_TRANSFER","RECAP_SEND","RECAP_RETURN"].includes(action);
   const [filter, setFilter] = useState(""),
     [search, setSearch] = useState(""),
     [details, setDetails] = useState<Details | null>(null),
@@ -179,10 +193,33 @@ export default function TireInventory({
     } | null>(null),
     [position, setPosition] = useState(""),
     [client, setClient] = useState("");
+  useEffect(()=>{if(!access.can_write || (premiumAction(action)&&!access.features.advanced_lifecycle))setAction("");},[access.can_write,access.features.advanced_lifecycle,action]);
   const detailRequest = useRef(0);
-  const move = role === "owner" || role === "manager" || role === "tire_tech",
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [visible, setVisible] = useState(false);
+  function close() {
+    if (busy) return;
+    ++detailRequest.current;
+    dialogRef.current?.close();
+    setVisible(false);
+    setDetails(null);
+    setAction("");
+    setLoading(false);
+    onClose?.();
+  }
+  useEffect(() => { if (tireId) void open(tireId); }, [tireId]);
+  useEffect(() => {
+    if (!visible) return;
+    dialogRef.current?.showModal();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [visible]);
+  useEffect(() => { dialogRef.current?.scrollTo({top:0}); }, [details?.tire.id, details?.tire.version]);
+  const move = access.can_write&&(role === "owner" || role === "manager" || role === "tire_tech"),
     manage = role === "owner" || role === "manager";
   async function open(tid: string) {
+    setVisible(true);
     const request = ++detailRequest.current;
     setLoading(true);
     setError("");
@@ -234,6 +271,7 @@ export default function TireInventory({
       (t) => t.position === position && t.id !== asset?.id,
     );
   async function start(value: string) {
+    if(premiumAction(value)&&!access.features.advanced_lifecycle)return;
     setAction("");
     setError("");
     setNotice("");
@@ -256,7 +294,7 @@ export default function TireInventory({
   }
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!asset) return;
+    if (!asset || !access.can_write || (premiumAction(action)&&!access.features.advanced_lifecycle)) return;
     setBusy(true);
     setError("");
     const f = new FormData(e.currentTarget);
@@ -267,6 +305,7 @@ export default function TireInventory({
       reason: f.get("reason"),
       cost_cents: Math.round(Number(f.get("cost") || 0) * 100),
     };
+    if (["REMOVE", "DISCARD"].includes(action)) body.removal_report={cause:f.get("report_cause"),carcass:f.get("report_carcass"),assessment:f.get("report_assessment"),responsible:f.get("report_responsible")};
     if (asset.state === "INSTALADO")
       body.source_km = Number(f.get("source_km"));
     if (["INSTALL", "TRANSFER", "ROTATE"].includes(action)) {
@@ -312,6 +351,7 @@ export default function TireInventory({
   }
   return (
     <div className="tire-inventory">
+      <div hidden={!!onClose}>
       <div className="inventory-summary">
         <button
           className={!filter ? "active" : ""}
@@ -373,7 +413,7 @@ export default function TireInventory({
               .map((t) => (
                 <tr key={t.id}>
                   <td>
-                    <b>{t.code}</b>
+                    <button className="table-link" onClick={() => { setDetails(null); setAction(""); void open(t.id); }}>{t.code}</button>
                     <small>Série: {t.serial_number||"Não informada"}</small>
                   </td>
                   <td>
@@ -400,7 +440,7 @@ export default function TireInventory({
                         void open(t.id);
                       }}
                     >
-                      Ciclo de vida →
+                      Dados e histórico →
                     </button>
                   </td>
                 </tr>
@@ -413,7 +453,12 @@ export default function TireInventory({
           </p>
         )}
       </section>
-      {loading && !details && <p role="status">Carregando histórico…</p>}
+      </div>
+      <dialog ref={dialogRef} className="tire-dossier-dialog" aria-label="Dados e histórico do pneu" onCancel={e => { e.preventDefault(); close(); }}>
+      <div className="dossier-toolbar"><strong>Dados e histórico do pneu</strong><button type="button" className="table-link" disabled={busy} onClick={close} autoFocus>Fechar</button></div>
+      {loading && <p role="status">Carregando histórico…</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="info" role="status">{notice}</p>}
       {asset && (
         <section className="surface lifecycle-details">
           <div className="surface-title">
@@ -426,10 +471,7 @@ export default function TireInventory({
             <button
               className="table-link"
               disabled={busy}
-              onClick={() => {
-                setDetails(null);
-                setAction("");
-              }}
+              onClick={close}
             >
               Fechar
             </button>
@@ -442,9 +484,10 @@ export default function TireInventory({
           </p>
           <p><strong>{asset.retread_count+1}ª vida</strong> · {asset.retread_count===0?"Banda original":`${asset.retread_count} recapagem(ns)`} · {roadNames[asset.road_use||""]||"Via não informada"}</p>
           <ol className="lifecycle-stages" aria-label="Etapas do ciclo do pneu">{Object.entries(stateNames).map(([state,name])=><li key={state} aria-current={asset.state===state?"step":undefined}>{name}</li>)}</ol>
-          <div className="lifecycle-facts">
+          <div className="lifecycle-facts"><p><strong>{number(asset.current_life_km)} km</strong><br/>Vida atual ({asset.retread_count+1}ª vida)</p>
             <p><strong>Número de fogo</strong><br/>{asset.code}</p>
             <p><strong>Número de série</strong><br/>{asset.serial_number||"Não informado"}</p>
+            <p><strong>Ano de fabricação</strong><br/>{asset.manufacture_year||(asset.dot_code?2000+Number(asset.dot_code.slice(-2)):"Não informado")}</p>
             <p><strong>DOT</strong><br/>{asset.dot_code||"Não informado"}</p>
             <p><strong>Validade operacional</strong><br/>{asset.expires_on?new Date(asset.expires_on.slice(0,10)+"T00:00:00Z").toLocaleDateString("pt-BR",{timeZone:"UTC"}):"Não informada"}</p>
             <p><strong>Posição e lado</strong><br/>{asset.position?positionLabel(asset.position):"Fora do veículo"}</p>
@@ -482,6 +525,7 @@ export default function TireInventory({
             A quilometragem usa os odômetros informados a partir do início do
             rastreamento. Não estimamos percursos anteriores.
           </p>
+          {!access.features.advanced_lifecycle&&<UpgradeNotice feature="advanced_lifecycle"/>}
           <div className="lifecycle-actions">
             {role !== "driver" &&
               asset.state !== "DESCARTADO" &&
@@ -490,6 +534,7 @@ export default function TireInventory({
                   className="button small"
                   onClick={() => {
                     setAction("");
+                    close();
                     onInspect(asset);
                   }}
                 >
@@ -512,8 +557,8 @@ export default function TireInventory({
                       ? ["RECAP_RETURN", "DISCARD"]
                       : ["INSTALL", "STOCK_TRANSFER", "RECAP_SEND", "DISCARD"]
                   ).map((a) => (
-                    <option value={a} key={a}>
-                      {actions[a]}
+                    <option value={a} key={a} disabled={premiumAction(a)&&!access.features.advanced_lifecycle}>
+                      {actions[a]}{premiumAction(a)&&!access.features.advanced_lifecycle?" · Pro":""}
                     </option>
                   ))}
                 </select>
@@ -685,6 +730,7 @@ export default function TireInventory({
                   não poderá voltar à operação.
                 </label>
               )}
+              {["REMOVE","DISCARD"].includes(action)&&<RemovalReportFields discard={action==="DISCARD"}/>}
               <label>
                 Motivo / observações
                 <input
@@ -730,10 +776,11 @@ export default function TireInventory({
                   {m.to_state === "EM_ESTOQUE" ? ` · ${m.stock_location}` : ""}
                 </p>
                 <p>{m.reason}</p>
+                {m.removal_report&&<RemovalReportView report={m.removal_report} id={m.id} code={asset.code} km={m.tracked_km} date={m.created_at} actor={m.actor_name} vehicle={m.from_plate}/>}
                 {(m.life_number||m.road_use||m.from_driver_name||m.to_driver_name)&&<p>{m.life_number?`${m.life_number}ª vida · `:""}{m.road_use?`${roadNames[m.road_use]||m.road_use}`:""}{m.from_driver_name?` · motorista na saída: ${m.from_driver_name}`:""}{m.to_driver_name?` · motorista na entrada: ${m.to_driver_name}`:""}</p>}
                 <small>
                   {m.actor_name || "Sistema"} · {number(m.tracked_km)} km
-                  rastreados · sulco {m.tread_mm} mm
+                  rastreados no total · {number(m.life_km||0)} km nesta vida · sulco {m.tread_mm} mm
                   {m.source_km !== null
                     ? ` · odômetro de saída ${number(m.source_km)} km`
                     : ""}
@@ -755,6 +802,7 @@ export default function TireInventory({
           )}
         </section>
       )}
+      </dialog>
     </div>
   );
 }

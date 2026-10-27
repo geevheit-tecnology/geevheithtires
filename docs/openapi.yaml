@@ -30,9 +30,14 @@ components:
         current_km: {type: integer, minimum: 0}
     Tire:
       type: object
-      required: [code, brand, size, tread_mm, acquisition_cost]
+      required: [code, serial_number, dot_code, expires_on, road_use, brand, size, tread_mm, acquisition_cost]
       properties:
         code: {type: string}
+        serial_number: {type: string}
+        dot_code: {type: string, description: Sufixo de quatro dígitos com semana e ano de fabricação}
+        manufacture_year: {type: integer, minimum: 2000, description: Deve coincidir com o DOT; clientes antigos podem omitir e o servidor deriva do DOT}
+        expires_on: {type: string, format: date}
+        road_use: {type: string, enum: [ASFALTO, TERRA, MISTO]}
         brand: {type: string}
         model: {type: string}
         size: {type: string}
@@ -257,3 +262,25 @@ paths:
       responses:
         '201': {description: Convite enviado}
         '503': {description: E-mail não configurado}
+
+  /entitlements:
+    get:
+      summary: Recursos efetivos do plano da empresa autenticada
+      description: Avaliação usa Starter. Recursos Pro dependem de assinatura vigente. Cabeçalhos, parâmetros ou claims de plano do cliente não concedem acesso.
+      responses:
+        '200':
+          description: Plano efetivo, situação, escrita, limites e mapa de recursos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plan_id: {type: string, enum: [starter, pro, enterprise]}
+                  plan_name: {type: string}
+                  status: {type: string, enum: [trial, active, expired, suspended]}
+                  can_write: {type: boolean}
+                  vehicle_limit: {type: integer}
+                  user_limit: {type: integer}
+                  features: {type: object, additionalProperties: {type: boolean}}
+        '401': {description: Sessão inválida}
+        '503': {description: Não foi possível consultar a assinatura}

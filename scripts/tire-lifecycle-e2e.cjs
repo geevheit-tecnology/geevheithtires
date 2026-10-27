@@ -55,7 +55,7 @@ const credentials = JSON.parse(
     await page
       .locator("tr")
       .filter({ hasText: "QA-LIFECYCLE-001" })
-      .getByRole("button", { name: "Ciclo de vida" })
+      .getByRole("button", { name: "Dados e histórico" })
       .click();
     const detail = page.locator(".lifecycle-details");
     await detail
@@ -81,7 +81,7 @@ const credentials = JSON.parse(
       ]);
       assert.equal(response.status(), 201, (await response.json()).title);
       await form.waitFor({ state: "detached" });
-      await page
+      await page.locator("dialog[open]")
         .getByText(
           "Movimentação concluída. Histórico, estoque e alertas atualizados.",
           { exact: true },
@@ -107,6 +107,7 @@ const credentials = JSON.parse(
     assert.equal(status.position, "1DE");
     assert.equal(status.tracked_km, 100);
     console.log("PASS: rodízio com quilometragem acumulada");
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Veículos", exact: true }).click();
     await page
       .locator(".vehicle-row")
@@ -128,13 +129,17 @@ const credentials = JSON.parse(
     await page
       .locator("tr")
       .filter({ hasText: "QA-LIFECYCLE-001" })
-      .getByRole("button", { name: "Ciclo de vida" })
+      .getByRole("button", { name: "Dados e histórico" })
       .click();
     await detail
       .getByRole("heading", { name: "QA-LIFECYCLE-001 · Marca QA" })
       .waitFor();
     await start("REMOVE");
     await detail.getByLabel("Local no estoque").fill("Galpão B");
+    await detail.getByLabel("Ocorrência",{exact:true}).selectOption("DESGASTE");
+    await detail.getByLabel("Condição da carcaça").selectOption("PRESERVADA");
+    await detail.getByLabel("Responsável pela avaliação").fill("Técnico QA");
+    await detail.getByLabel("Avaliação e conclusão").fill("Carcaça avaliada e preservada para manutenção.");
     await save("Retirada física para inspeção e manutenção");
     await start("STOCK_TRANSFER");
     await detail.getByLabel("Local no estoque").fill("Galpão C");
@@ -156,6 +161,8 @@ const credentials = JSON.parse(
     assert.ok(alerts.some((a) => a.kind === "retread"));
     assert.ok(alerts.some((a) => a.kind === "wear"));
     console.log("PASS: alertas de desgaste e avaliação para recapagem");
+    await page.locator("tr").filter({hasText:"QA-LIFECYCLE-001"}).getByRole("button",{name:"Dados e histórico"}).click();
+    await detail.getByRole("heading",{name:"QA-LIFECYCLE-001 · Marca QA"}).waitFor();
     await start("RECAP_SEND");
     await detail.getByLabel("Fornecedor da recapagem").fill("Recapadora QA");
     await save("Carcaça avaliada e enviada à recapadora QA");

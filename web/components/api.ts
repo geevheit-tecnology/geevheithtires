@@ -1,3 +1,4 @@
+export class ApiError extends Error {constructor(message:string,public status:number){super(message);this.name="ApiError";}}
 export async function api(path: string, body?: unknown, method?: string) {
   const res = await fetch(`/api/backend/${path}`, {
     method: method || (body ? "POST" : "GET"),
@@ -6,6 +7,6 @@ export async function api(path: string, body?: unknown, method?: string) {
   });
   const data = await res.json();
   if (!res.ok)
-    throw new Error(data.title || "Não foi possível concluir a solicitação.");
+    throw new ApiError(data.title || "Não foi possível concluir a solicitação.",res.status);
   return data;
 }

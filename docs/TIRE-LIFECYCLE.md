@@ -51,3 +51,7 @@ Aplicar e testar na branch de validação antes de produção. Publicar a API co
 `TestTireLifecycleAndAutomation` cobre o ciclo completo, reenvios, troca atômica, posições concorrentes, quilometragem, isolamento, recapagem, descarte, eventos imutáveis, deduplicação e inspeções vencidas. A suíte anterior continua cobrindo cadastro, autenticação e cobrança pausada.
 
 `scripts/tire-lifecycle-e2e.cjs` executa o fluxo real no navegador com uma conta temporária em ambiente de validação. Requer Playwright e `QA_ACCOUNT_FILE` (JSON com e-mail/senha de teste), além do frontend e API locais. Não usar uma conta de produção.
+
+## Privilégios por plano
+
+A avaliação usa Starter. Recapagem, transferência entre locais e personalização de regras exigem Pro ou Enterprise. Instalação, retirada com laudo, rodízio e consulta da ficha seguem disponíveis no Starter. Consulte [a matriz completa](PLANOS_E_IDENTIDADE.md). Testes do ciclo completo precisam de assinatura Pro fictícia em banco isolado.

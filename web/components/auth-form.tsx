@@ -15,6 +15,7 @@ export function AuthForm({
 }) {
   const router = useRouter();
   const params = useSearchParams();
+  const adminLogin=params.get("next")==="/admin";
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,7 +33,7 @@ export function AuthForm({
           ? verify
             ? "Confirme seu e-mail."
             : "Defina sua senha."
-          : "Bom ter você de volta.";
+          : adminLogin?"Acesso do administrador.":"Bom ter você de volta.";
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
@@ -52,7 +53,7 @@ export function AuthForm({
         const registry = await api(`registration/cnpj/${String(data.cnpj).toUpperCase().replace(/[./\s-]/g, "")}`);
         if (!registry.active) throw new Error("O CNPJ não está com situação cadastral ativa. Confira os dados da empresa.");
       }
-      if (neonEnabled && mode === "recover") {
+      if (neonEnabled && !adminLogin && mode === "recover") {
         const result = await neonClient.requestPasswordReset({
           email: String(data.email),
           redirectTo: `${window.location.origin}/aceitar-convite?kind=neon-reset`,
@@ -68,7 +69,7 @@ export function AuthForm({
         return;
       }
       let managedSession: unknown;
-      if (neonEnabled && (mode === "login" || mode === "register")) {
+      if (neonEnabled && !adminLogin && (mode === "login" || mode === "register")) {
         const providerError = (reason: unknown) => ({
           error: { message: reason instanceof Error ? reason.message : "Não foi possível autenticar sua conta." },
         });
@@ -116,7 +117,8 @@ export function AuthForm({
       if (mode === "recover" || mode === "accept") {
         setMessage(out.message);
       } else {
-        router.push("/app");
+        if(adminLogin&&!(await api("platform/me")).admin)throw new Error("Esta conta não possui acesso à administração da plataforma.");
+        router.push(adminLogin?"/admin":"/app");
         router.refresh();
       }
     } catch (e) {
@@ -160,6 +162,7 @@ export function AuthForm({
         <div className="auth-box">
           <span className="label">GEEVHEITTIRE</span>
           <h2>{title}</h2>
+          {params.get("closed")==="1"&&<p className="success">Seu acesso foi encerrado. Os registros operacionais foram arquivados.</p>}
           <p>
             {completingCompany
               ? "Seu acesso já está criado. Preencha os dados da empresa para começar."
@@ -170,7 +173,7 @@ export function AuthForm({
           {message ? (
             <div className="success" role="status">
               {message}
-              <Link href="/login">Ir para o login →</Link>
+              <Link href={adminLogin?"/admin/login":"/login"}>Ir para o login →</Link>
             </div>
           ) : (
             <form onSubmit={submit}>
@@ -240,12 +243,12 @@ export function AuthForm({
           )}
           {mode === "login" && (
             <>
-              <Link className="auth-link" href="/recuperar-senha">
+              <Link className="auth-link" href={adminLogin?"/recuperar-senha?next=/admin":"/recuperar-senha"}>
                 Esqueci minha senha
               </Link>
-              <p className="auth-switch">
+              {!adminLogin&&<p className="auth-switch">
                 Ainda não tem conta? <Link href="/cadastro">Comece aqui</Link>
-              </p>
+              </p>}
             </>
           )}
           {mode === "register" && (
