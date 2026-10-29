@@ -84,7 +84,14 @@ func (a *App) platformDashboard(w http.ResponseWriter, r *http.Request) {
 		problem(w, 503, "Não foi possível carregar a administração.")
 		return
 	}
-	write(w, 200, out)
+	var snapshot map[string]any
+	if json.Unmarshal(out, &snapshot) != nil {
+		problem(w, 503, "Não foi possível carregar a administração.")
+		return
+	}
+	stats := a.db.Stat()
+	snapshot["system"] = map[string]any{"database": "connected", "pool_max": stats.MaxConns(), "pool_acquired": stats.AcquiredConns(), "pool_idle": stats.IdleConns(), "payments_enabled": asaasFromEnv() != nil}
+	write(w, 200, snapshot)
 }
 func (a *App) platformChange(w http.ResponseWriter, r *http.Request) {
 	if !a.platformOK(w, r) {
@@ -123,7 +130,7 @@ func (a *App) billingStatus(w http.ResponseWriter, r *http.Request) {
  'vehicle_limit',case when s.paid_until>now() then s.vehicle_limit else 15 end,'user_limit',case when s.paid_until>now() then s.user_limit else 3 end,
  'vehicles',(select count(*) from vehicles where company_id=c.id and deleted_at is null),'users',(select count(*) from users where company_id=c.id and deleted_at is null),
  'plans',coalesce((select jsonb_agg(to_jsonb(p) order by price_cents) from billing_plans p where published),'[]'),
- 'invoices',coalesce((select jsonb_agg(to_jsonb(x)) from (select id,plan_id,price_cents,status,checkout_url,due_date,paid_at,environment from billing_invoices where company_id=c.id order by created_at desc limit 24) x),'[]'))
+ 'invoices',coalesce((select jsonb_agg(to_jsonb(x)) from (select id,plan_id,price_cents,status,checkout_url,due_date,paid_at,environment,source,reference from billing_invoices where company_id=c.id order by created_at desc limit 24) x),'[]'))
  from companies c join subscriptions s on s.company_id=c.id where c.id=$1 and c.deleted_at is null`, claims(r).Company).Scan(&raw)
 	if e != nil {
 		problem(w, 503, "Não foi possível carregar a assinatura.")

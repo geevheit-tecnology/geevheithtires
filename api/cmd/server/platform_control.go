@@ -155,7 +155,7 @@ func (a *App) platformProfile(w http.ResponseWriter, r *http.Request) {
 		_, err = tx.Exec(r.Context(), "update account_tokens set used_at=now() where user_id=$1 and used_at is null", claims(r).Subject)
 	}
 	if err == nil {
-		_, err = tx.Exec(r.Context(), "insert into platform_audit(actor_id,action,target,reason,data) values($1,'update_profile',$2,'Alteração pelo próprio administrador',jsonb_build_object('password_changed',$3::boolean))", claims(r).Subject, claims(r).Subject, changed)
+		_, err = tx.Exec(r.Context(), "select platform_audit_profile($1,$2)", claims(r).Subject, changed)
 	}
 	if err != nil {
 		problem(w, 500, "Não foi possível salvar seu perfil.")

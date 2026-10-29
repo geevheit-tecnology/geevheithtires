@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -34,12 +35,13 @@ import (
 )
 
 type App struct {
-	db        *pgxpool.Pool
-	secret    []byte
-	url       string
-	mailKey   string
-	directory *publicDirectory
-	limiter   sync.Map
+	db           *pgxpool.Pool
+	secret       []byte
+	url          string
+	mailKey      string
+	directory    *publicDirectory
+	limiter      sync.Map
+	limiterSweep atomic.Int64
 }
 type Claims struct {
 	Company string `json:"company_id"`
@@ -161,7 +163,29 @@ func (a *App) rate(next http.Handler) http.Handler {
 		if err != nil {
 			key = r.RemoteAddr
 		}
-		v, _ := a.limiter.LoadOrStore(key, &rateWindow{at: time.Now()})
+		if c, ok := r.Context().Value(claimsKey{}).(*Claims); ok {
+			key = "user:" + c.Subject
+		} else if a.db != nil {
+			if !a.publicQuota(w, r, key) {
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+		now := time.Now()
+		prev := a.limiterSweep.Load()
+		if now.Unix()-prev >= 60 && a.limiterSweep.CompareAndSwap(prev, now.Unix()) {
+			a.limiter.Range(func(k, v any) bool {
+				b := v.(*rateWindow)
+				b.Lock()
+				if now.Sub(b.at) > 2*time.Minute {
+					a.limiter.Delete(k)
+				}
+				b.Unlock()
+				return true
+			})
+		}
+		v, _ := a.limiter.LoadOrStore(key, &rateWindow{at: now})
 		b := v.(*rateWindow)
 		b.Lock()
 		if time.Since(b.at) > time.Minute {
@@ -457,7 +481,7 @@ func (a *App) accept(w http.ResponseWriter, r *http.Request) {
 			problem(w, 422, "A senha deve ter de 10 a 128 caracteres.")
 			return
 		}
-		_, e = t.Exec(ctx, "update users set password_hash=$1,email_verified_at=coalesce(email_verified_at,now()),updated_at=now() where id=$2", passwordHash(d.Password), uid)
+		_, e = t.Exec(ctx, "update users set password_hash=$1,email_verified_at=coalesce(email_verified_at,now()),session_version=session_version+1,updated_at=now() where id=$2", passwordHash(d.Password), uid)
 		if e == nil {
 			_, e = t.Exec(ctx, "update refresh_tokens set revoked_at=now() where user_id=$1", uid)
 		}
@@ -863,18 +887,19 @@ func main() {
 	defer stopWorker()
 	go a.maintenanceWorker(workerCtx)
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(30*time.Second))
+	r.Use(middleware.RequestID, middleware.Recoverer, requestObservation, middleware.Timeout(30*time.Second))
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		if a.db.Ping(r.Context()) != nil {
 			problem(w, 503, "Banco indisponível.")
 			return
 		}
-		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire", "tire_lifecycle_revision": "3", "admin_revision": "2", "release": "2026-10-28-admin-control"})
+		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire", "tire_lifecycle_revision": "3", "admin_revision": "2", "release": "2026-10-29-admin-control"})
 	})
 	r.Post("/api/v1/webhooks/asaas", a.asaasWebhook)
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/plans", a.publicPlans)
 		r.Group(func(r chi.Router) {
-			r.Use(a.rate)
+			r.Use(a.rate, passwordWorkLimit)
 			r.Post("/auth/register", a.register)
 			r.Post("/auth/login", a.login)
 			r.Post("/auth/neon", a.neonSession)
@@ -884,7 +909,6 @@ func main() {
 			r.Post("/auth/accept", a.accept)
 			r.Get("/registration/cnpj/{cnpj}", a.lookupCNPJ)
 			r.Get("/registration/cep/{cep}", a.lookupCEP)
-			r.Get("/plans", a.publicPlans)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(a.auth)
@@ -920,7 +944,7 @@ func main() {
 			r.Get("/platform/finance", a.platformFinance)
 			r.Post("/platform/finance", a.platformCreateReceivable)
 			r.Patch("/platform/finance/{id}", a.platformSettleReceivable)
-			r.With(a.rate).Patch("/platform/profile", a.platformProfile)
+			r.With(a.rate, passwordWorkLimit).Patch("/platform/profile", a.platformProfile)
 			r.Get("/platform/tickets", a.platformTickets)
 			r.Get("/platform/tickets/{id}", a.platformTicketDetail)
 			r.Patch("/platform/tickets/{id}", a.platformUpdateTicket)
@@ -980,6 +1004,19 @@ func newPool(ctx context.Context) (*pgxpool.Pool, error) {
 	if e != nil {
 		return nil, e
 	}
+	max, e := strconv.Atoi(env("DB_MAX_CONNS", "20"))
+	if e != nil || max < 2 || max > 100 {
+		return nil, fmt.Errorf("DB_MAX_CONNS must be between 2 and 100")
+	}
+	cfg.MaxConns = int32(max)
+	cfg.MinConns = 0
+	cfg.MaxConnLifetime = 30 * time.Minute
+	cfg.MaxConnLifetimeJitter = 5 * time.Minute
+	cfg.MaxConnIdleTime = 5 * time.Minute
+	cfg.ConnConfig.ConnectTimeout = 10 * time.Second
+	cfg.ConnConfig.RuntimeParams["statement_timeout"] = "20000"
+	cfg.ConnConfig.RuntimeParams["lock_timeout"] = "8000"
+	cfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = "20000"
 	cfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
 		_, e := c.Exec(ctx, "SET ROLE geevheit_runtime")
 		return e

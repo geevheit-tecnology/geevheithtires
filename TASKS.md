@@ -2,13 +2,24 @@
 
 ## Centro de controle administrativo
 
-- [ ] Corrigir edição dos três planos e publicação dos preços na landing e no painel do cliente.
-- [ ] Permitir sincronizar limites com clientes existentes, com validação de uso e auditoria.
-- [ ] Implementar financeiro com filtros, recebíveis, baixas manuais e histórico por cliente.
-- [ ] Adicionar perfil, alteração de senha e encerramento seguro da sessão administrativa.
-- [ ] Reorganizar o admin com navegação, indicadores, ações e layouts desktop/celular.
-- [ ] Validar API, permissões, banco real e fluxos completos no navegador.
+- [x] Corrigir edição dos três planos e publicação dos preços na landing e no painel do cliente.
+- [x] Permitir sincronizar limites com clientes existentes, com validação de uso e auditoria.
+- [x] Implementar financeiro com filtros, recebíveis, baixas manuais e histórico por cliente.
+- [x] Adicionar perfil, alteração de senha e encerramento seguro da sessão administrativa.
+- [x] Reorganizar o admin com navegação, indicadores, ações e layouts desktop/celular.
+- [x] Validar API, permissões, banco real e fluxos completos no navegador.
 - [ ] Publicar API e frontend e verificar as revisões dos serviços.
+
+### Capacidade inicial — 100 empresas / 500 usuários
+
+- [x] Validar 500 identidades, 1.000 veículos, 8.000 pneus e 8.000 inspeções em Neon isolado.
+- [x] Executar carga com 10, 25 e 50 requisições simultâneas: 3.589 respostas, zero erros, p95 máximo 961,1 ms no ambiente testado.
+- [x] Limitar conexões de banco e trabalho de senhas; cotas públicas compartilhadas entre réplicas e cotas autenticadas por usuário.
+- [x] Registrar sinais de requisições lentas/erros e estado do pool no admin, sem senhas ou tokens nos logs.
+- [x] Validar build, TypeScript, vet/race, auditoria npm e vulnerabilidades alcançáveis Go.
+- [ ] Homologar a capacidade no host de produção sempre ativo, monitoramento e restauração de backup.
+
+Asaas/Resend permanecem desativados. As operações financeiras desta entrega são registros manuais auditados; não há cobrança, estorno bancário ou envio de e-mail automático. A referência de carga está em `docs/qa/capacity-2026-10-29.json`; ela não certifica o Render Free.
 
 ## Validação e publicação dos alinhamentos — 28/10/2026
 

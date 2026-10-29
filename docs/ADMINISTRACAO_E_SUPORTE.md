@@ -1,6 +1,6 @@
 # Administração e suporte
 
-Implementação local; não publicada nesta etapa. As migrações 000012–000014 foram aplicadas somente na branch temporária de validação.
+Atualização de 29/10/2026: o novo centro de controle foi validado com API e banco reais isolados. Inclui três planos, preços publicados, financeiro manual, perfil/senha, auditoria e controles de capacidade. O estado de publicação e as condições para escala estão em [PRODUCAO_100_EMPRESAS.md](PRODUCAO_100_EMPRESAS.md).
 
 ## Acesso
 
@@ -8,9 +8,9 @@ O endereço de entrada é `/admin/login`. A conta administrativa escolhida pelo 
 
 A associação administrativa é mantida no banco e conferida pelo backend em cada operação. Ser proprietário de uma empresa não concede administração da plataforma. A interface fornece clientes com busca e paginação, configuração de valores e limites dos planos, concessões de acesso com prazo, suspensão, prorrogação de avaliação, encerramento de clientes e auditoria.
 
-O operador pode criar uma nova identidade interna com `go run ./cmd/platform-admin -create -email EMAIL -reason JUSTIFICATIVA -setup-file CAMINHO_NOVO`, usando a conexão direta do proprietário das migrações e `APP_URL` correto. O comando recusa e-mail já cadastrado. O arquivo privado contém um convite de uso único, válido por 24 horas, para o próprio administrador definir sua senha. O link não é enviado por e-mail automaticamente. A conta real indicada foi criada e recebeu associação administrativa em 27/10/2026, após validar a identidade fictícia e seu primeiro acesso na branch temporária. O convite real está em arquivo privado temporário (permissão 0600), não versionado, e aguarda a definição de senha pelo responsável. As novas telas e migrações continuam locais. Antes da publicação, o acesso já existente usa `/login` e depois `/admin`.
+O operador pode criar uma nova identidade interna com `go run ./cmd/platform-admin -create -email EMAIL -reason JUSTIFICATIVA -setup-file CAMINHO_NOVO`, usando a conexão direta do proprietário das migrações e `APP_URL` correto. O comando recusa e-mail já cadastrado. O arquivo privado contém um convite de uso único, válido por 24 horas, para o próprio administrador definir sua senha. O link não é enviado por e-mail automaticamente. A conta real indicada foi criada e recebeu associação administrativa em 27/10/2026, após validar a identidade fictícia e seu primeiro acesso na branch temporária. O primeiro acesso foi concluído por solicitação do titular. O acesso atual é `/admin/login`; a própria conta pode atualizar nome e senha em Minha conta. Senhas não são documentadas no repositório.
 
-Conceder vigência não gera fatura nem registra pagamento. Alterar plano não ativa Asaas. Os recursos continuam limitados pelo catálogo do nível, com controle no servidor. Alterações de configuração têm verificação de versão e justificativa auditada; valores zero são permitidos em rascunho e não podem ser publicados para cobrança.
+Conceder vigência não gera fatura nem registra pagamento. Alterar plano não ativa Asaas. Os recursos continuam limitados pelo catálogo do nível, com controle no servidor. Alterações de configuração têm verificação de versão e justificativa auditada; valores zero são permitidos em rascunho e não podem ser publicados. Publicar atualiza a landing e os planos visíveis ao cliente sem ativar gateway. A opção de sincronizar limites aplica as novas cotas aos contratos vinculados e verifica o uso atual.
 
 ## Chamados
 

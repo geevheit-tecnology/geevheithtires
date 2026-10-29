@@ -42,7 +42,7 @@ const demo: Tire[] = positions.map((position, i) => ({
 }));
 export default function Home() {
   const [offers,setOffers]=useState<(typeof planCatalog[number]&{display_price_cents?:number})[]>(planCatalog);
-  useEffect(()=>{let active=true;fetch("/api/backend/plans").then(r=>r.ok?r.json():null).then(out=>{if(active&&Array.isArray(out?.plans))setOffers(out.plans)}).catch(()=>{});return()=>{active=false}},[]);
+  useEffect(()=>{let active=true;const refresh=()=>{if(document.visibilityState!=="visible")return;fetch("/api/backend/plans",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(out=>{if(active&&Array.isArray(out?.plans))setOffers(out.plans)}).catch(()=>{})};refresh();const timer=setInterval(refresh,15000);window.addEventListener("focus",refresh);return()=>{active=false;clearInterval(timer);window.removeEventListener("focus",refresh)}},[]);
   const landingRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -389,9 +389,7 @@ export default function Home() {
             <div className="eyebrow dark">CRESÇA NO SEU RITMO</div>
             <h2>Um plano para cada jornada.</h2>
             <p>
-              Valores em definição. Os preços exibidos são provisórios e serão
-              atualizados antes da contratação. Os recursos futuros estão
-              identificados em cada plano.
+              {offers.some(p=>(p.display_price_cents||0)>0)?"Consulte os valores mensais publicados e os recursos de cada plano. Planos sem preço publicado permanecem sob consulta.":"Valores em definição. Os preços exibidos são provisórios e serão atualizados antes da contratação."} Os recursos futuros estão identificados em cada plano.
             </p>
           </div>
           <div className="plans">
@@ -421,7 +419,7 @@ export default function Home() {
               </article>
             ))}
           </div>
-          <p className="pricing-note caption">O cadastro inicia uma avaliação de 14 dias com os recursos Starter. A contratação dos demais planos será disponibilizada após a definição comercial.</p>
+          <p className="pricing-note caption">O cadastro inicia uma avaliação de 14 dias com os recursos Starter. Consulte a administração para contratar os demais planos.</p>
         </section>
         <section className="section faq container">
           <div>

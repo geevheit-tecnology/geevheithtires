@@ -192,6 +192,14 @@ func (a *App) maintenanceSweep(ctx context.Context) {
 			defer t.Rollback(work)
 			_, err = t.Exec(work, "select set_config('app.company_id',$1,true)", company)
 			if err == nil {
+				var active bool
+				err = t.QueryRow(work, "select exists(select 1 from companies where id=$1 and deleted_at is null)", company).Scan(&active)
+				if err == nil && !active {
+					// The tenant may have been closed after the sweep captured its list.
+					return
+				}
+			}
+			if err == nil {
 				err = a.refreshMaintenance(work, t, company)
 			}
 			if err == nil {

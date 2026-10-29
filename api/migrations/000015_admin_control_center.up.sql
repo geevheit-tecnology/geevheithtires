@@ -75,8 +75,8 @@ BEGIN
   'overdue_cents',coalesce((SELECT sum(price_cents) FROM invoices WHERE status='overdue'),0),
   'open_count',(SELECT count(*) FROM invoices WHERE status IN ('creating','pending','overdue')),
   'active_contracts',(SELECT count(*) FROM subscriptions s JOIN companies c ON c.id=s.company_id WHERE c.deleted_at IS NULL AND NOT s.suspended AND s.paid_until>now() AND NOT EXISTS(SELECT 1 FROM users u JOIN platform_admins a ON a.user_id=u.id WHERE u.company_id=c.id))
- ),'monthly',coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY month) FROM (
-  SELECT to_char(m,'YYYY-MM') month,coalesce((SELECT sum(i.price_cents) FROM billing_invoices i WHERE i.environment='production' AND i.status='paid' AND i.paid_at>=m AND i.paid_at<m+interval '1 month'),0) received_cents
+ ),'monthly',coalesce((SELECT jsonb_agg(to_jsonb(x) ORDER BY "month") FROM (
+  SELECT to_char(m,'YYYY-MM') AS "month",coalesce((SELECT sum(i.price_cents) FROM billing_invoices i WHERE i.environment='production' AND i.status='paid' AND i.paid_at>=m AND i.paid_at<m+interval '1 month'),0) received_cents
   FROM generate_series(date_trunc('month',now())-interval '5 months',date_trunc('month',now()),interval '1 month') m
  ) x),'[]')) INTO result;
  RETURN result;
