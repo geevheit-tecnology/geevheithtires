@@ -161,6 +161,9 @@ p {
   padding: 16px 22px;
   font-size: 14px;
   font-weight: 600;
+  min-height: 44px;
+  text-align: center;
+  line-height: 1.5;
   transition:
     transform 0.2s,
     background 0.2s;
@@ -174,6 +177,7 @@ p {
   gap: 12px;
   font-size: 12px;
 }
+.button > svg { flex-shrink: 0; }
 .button.outline {
   background: transparent;
   color: var(--ink);
@@ -1121,11 +1125,16 @@ label small {
   border-radius: 6px;
   padding: 9px;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
   background: white;
 }
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 .stat {
@@ -1179,7 +1188,7 @@ label small {
 }
 .steps {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 13px;
   margin-top: 20px;
 }
@@ -1216,7 +1225,7 @@ label small {
 }
 .panel-columns {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 20px;
   margin-top: 25px;
 }
@@ -1278,6 +1287,10 @@ label small {
   background: #eef1eb;
   border-radius: 7px;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  height: 44px;
 }
 .vehicle-icon svg {
   width: 20px;
@@ -1346,7 +1359,7 @@ label small {
 }
 .fleet-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 22px;
   align-items: start;
 }
@@ -2231,3 +2244,48 @@ td small {
 .button.danger { background:#9a4240; border-color:#9a4240; }
 .panel .error .table-link { display:block; margin-top:12px; }
 @media(max-width:800px){.panel .admin-entry{font-size:12px;padding:8px 2px;overflow-wrap:anywhere}.management-section{padding:18px}.commercial-header{flex-wrap:wrap}.commercial-admin .container{width:calc(100% - 32px)}}
+
+/* Shared alignment rules for operational surfaces and controls. */
+.panel :is(.surface, .stat, .onboarding, .fleet-grid > *, .panel-columns > *) { min-width: 0; }
+.panel .stat { display: flex; flex-direction: column; }
+.panel .stat > span { min-height: 46px; }
+.panel .stat small { display: block; margin-top: auto; }
+.panel .step { flex: 0 0 28px; width: 28px; height: 28px; }
+.panel .steps b { min-width: 0; }
+.panel .registration-buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.panel .registration-buttons .button { width: 100%; gap: 10px; padding: 12px; }
+.panel .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 280px; }
+.panel .empty-state > .button { align-self: center; }
+.panel .pill { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+.panel .vehicle-row > span:nth-child(2) { flex: 1; min-width: 0; }
+.panel .vehicle-row > span:nth-child(2) :is(b, small) { overflow-wrap: anywhere; }
+.panel .sidebar nav button { position: relative; min-height: 44px; }
+.panel .sidebar nav button.active::before { top: 50%; transform: translateY(-50%); }
+.panel .sidebar .brand { justify-content: flex-start; }
+.panel :is(.odometer-form, .report-filters, .vehicle-driver form) > label { margin-bottom: 0; }
+.panel :is(.odometer-form, .report-filters, .vehicle-driver form) > .button { margin: 0; }
+.panel .identity-fields label { margin-bottom: 0; }
+.panel .identity-fields :is(input:not([type="checkbox"]), select) { margin-top: 0; }
+.panel .identity-fields label small { margin-top: 0; }
+.panel .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 801px) and (max-width: 1200px) {
+  .panel .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .panel .panel-columns, .panel .registration-buttons { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 800px) {
+  .panel .sidebar .brand { justify-content: center; }
+  .panel .sidebar nav button { width: 100%; }
+  .panel .sidebar nav .count { top: 0; right: 0; margin: 0; min-width: 16px; text-align: center; }
+  .panel .registration-buttons { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .panel .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .panel .vehicle-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .panel .vehicle-row > span:nth-last-child(2) { grid-column: 2; margin-left: 0; }
+  .panel .vehicle-row > svg:last-child { grid-column: 3; grid-row: 1 / span 2; }
+  .panel .surface-title { gap: 12px; }
+  .panel .panel-title { gap: 12px; }
+  .panel-title > .icon-button { margin-left: 0; }
+  .panel :is(.odometer-form, .report-filters, .vehicle-driver form) > label { min-width: 0; width: 100%; }
+  .panel :is(.odometer-form, .vehicle-driver form) > .button { width: 100%; }
+}

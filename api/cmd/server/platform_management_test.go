@@ -46,7 +46,7 @@ func TestPlatformSupportAndAccountClosure(t *testing.T) {
 		if _, e = owner.Exec(ctx, "insert into users(id,company_id,name,email,password_hash,role) values($1,$2,'Management QA',$3,$4,'owner')", user, company, user+"@qa.invalid", passwordHash(password)); e != nil {
 			t.Fatal(e)
 		}
-		token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{company, "owner", jwt.RegisteredClaims{Subject: user, Issuer: "geevheittire", ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))}}).SignedString(a.secret)
+		token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{Company: company, Role: "owner", RegisteredClaims: jwt.RegisteredClaims{Subject: user, Issuer: "geevheittire", ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))}}).SignedString(a.secret)
 		tokens = append(tokens, token)
 	}
 	defer func() {

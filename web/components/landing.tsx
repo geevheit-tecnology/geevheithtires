@@ -413,7 +413,7 @@ export default function Home() {
                   href="/cadastro"
                   className={`button ${i === 1 ? "" : "outline"}`}
                 >
-                  Avaliar o Starter <ArrowUpRight size={16} />
+                  {p.id === "starter" ? "Avaliar o Starter" : `Conhecer o ${p.name}`} <ArrowUpRight size={16} />
                 </Link>
                 <p className="plan-quota">{p.vehicle_limit?`Até ${p.vehicle_limit} veículos e ${p.user_limit} usuários`:"Limites e atendimento sob consulta"}</p>
                 <PlanBenefits features={p.features} planned={p.planned}/>
@@ -421,6 +421,7 @@ export default function Home() {
               </article>
             ))}
           </div>
+          <p className="pricing-note caption">O cadastro inicia uma avaliação de 14 dias com os recursos Starter. A contratação dos demais planos será disponibilizada após a definição comercial.</p>
         </section>
         <section className="section faq container">
           <div>

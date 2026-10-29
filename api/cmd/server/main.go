@@ -44,6 +44,7 @@ type App struct {
 type Claims struct {
 	Company string `json:"company_id"`
 	Role    string `json:"role"`
+	Version int    `json:"sv,omitempty"`
 	jwt.RegisteredClaims
 }
 type identity struct {
@@ -192,7 +193,7 @@ func (a *App) auth(next http.Handler) http.Handler {
 			return
 		}
 		var active bool
-		if err := a.db.QueryRow(r.Context(), "select auth_account_active($1,$2)", c.Subject, c.Company).Scan(&active); err != nil {
+		if err := a.db.QueryRow(r.Context(), "select auth_account_active($1,$2) and auth_session_version($1)=$3", c.Subject, c.Company, c.Version).Scan(&active); err != nil {
 			problem(w, 503, "Não foi possível verificar a conta.")
 			return
 		}
@@ -225,7 +226,11 @@ func (a *App) session(ctx context.Context, t pgx.Tx, u identity) (map[string]any
 		return nil, e
 	}
 	now := time.Now()
-	c := Claims{u.Company, u.Role, jwt.RegisteredClaims{Subject: u.ID, Issuer: "geevheittire", IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute))}}
+	var version int
+	if e := t.QueryRow(ctx, "select session_version from users where id=$1", u.ID).Scan(&version); e != nil {
+		return nil, e
+	}
+	c := Claims{Company: u.Company, Role: u.Role, Version: version, RegisteredClaims: jwt.RegisteredClaims{Subject: u.ID, Issuer: "geevheittire", IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute))}}
 	access, e := jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString(a.secret)
 	if e != nil {
 		return nil, e
@@ -864,7 +869,7 @@ func main() {
 			problem(w, 503, "Banco indisponível.")
 			return
 		}
-		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire", "tire_lifecycle_revision": "3", "release": "2026-10-27-tire-management"})
+		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire", "tire_lifecycle_revision": "3", "admin_revision": "2", "release": "2026-10-28-admin-control"})
 	})
 	r.Post("/api/v1/webhooks/asaas", a.asaasWebhook)
 	r.Route("/api/v1", func(r chi.Router) {
@@ -912,6 +917,10 @@ func main() {
 			r.Post("/platform/clients/{id}/access", a.platformClientAccess)
 			r.Post("/platform/clients/{id}/close", a.platformCloseClient)
 			r.Put("/platform/plans/{id}", a.platformConfigurePlan)
+			r.Get("/platform/finance", a.platformFinance)
+			r.Post("/platform/finance", a.platformCreateReceivable)
+			r.Patch("/platform/finance/{id}", a.platformSettleReceivable)
+			r.With(a.rate).Patch("/platform/profile", a.platformProfile)
 			r.Get("/platform/tickets", a.platformTickets)
 			r.Get("/platform/tickets/{id}", a.platformTicketDetail)
 			r.Patch("/platform/tickets/{id}", a.platformUpdateTicket)

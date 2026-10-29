@@ -45,11 +45,13 @@ const credentials=JSON.parse(fs.readFileSync(process.env.QA_ACCOUNT_FILE,"utf8")
   const detail=page.locator(".lifecycle-details");
   await detail.getByText("2ª vida",{exact:true}).waitFor();
   await detail.getByText("SERIAL-QA-001",{exact:false}).waitFor();
-  await detail.getByText("Motorista Identidade QA",{exact:false}).waitFor();
+  await detail.locator(".lifecycle-facts").getByText("Motorista Identidade QA",{exact:false}).waitFor();
   await detail.locator("summary").filter({hasText:"Editar identificação"}).click();
   await detail.getByLabel("Tipo de via").selectOption("TERRA");
+  const savedIdentity=page.waitForResponse(r=>r.url().includes(`/tires/${tire.id}/identity`)&&r.request().method()==="PATCH");
   await detail.getByRole("button",{name:"Salvar identificação",exact:true}).click();
-  await page.waitForFunction(()=>document.querySelector('.lifecycle-details')?.textContent.includes('Terra'));
+  const identityResponse=await savedIdentity;assert.equal(identityResponse.status(),200,await identityResponse.text());
+  await detail.locator(".identity-fields").waitFor({state:"visible"});
   const life=await call(`tires/${tire.id}/lifecycle`);assert.equal(life.tire.road_use,"TERRA");assert.equal(life.movements[0].road_use,"MISTO");assert.equal(life.movements[0].life_number,2);assert.equal(life.movements[0].to_driver_name,driver.name);
   for(const width of [1440,390]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`overflow ${width}`);}
   await page.setViewportSize({width:1440,height:1000});

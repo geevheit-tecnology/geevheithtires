@@ -80,7 +80,7 @@ func (a *App) platformDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var out json.RawMessage
-	if e := a.db.QueryRow(r.Context(), "select platform_snapshot($1)", claims(r).Subject).Scan(&out); e != nil {
+	if e := a.db.QueryRow(r.Context(), "select platform_control_snapshot($1)", claims(r).Subject).Scan(&out); e != nil {
 		problem(w, 503, "Não foi possível carregar a administração.")
 		return
 	}

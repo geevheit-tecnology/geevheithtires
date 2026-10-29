@@ -1,5 +1,36 @@
 # Estoque, histórico e desempenho de pneus
 
+## Centro de controle administrativo
+
+- [ ] Corrigir edição dos três planos e publicação dos preços na landing e no painel do cliente.
+- [ ] Permitir sincronizar limites com clientes existentes, com validação de uso e auditoria.
+- [ ] Implementar financeiro com filtros, recebíveis, baixas manuais e histórico por cliente.
+- [ ] Adicionar perfil, alteração de senha e encerramento seguro da sessão administrativa.
+- [ ] Reorganizar o admin com navegação, indicadores, ações e layouts desktop/celular.
+- [ ] Validar API, permissões, banco real e fluxos completos no navegador.
+- [ ] Publicar API e frontend e verificar as revisões dos serviços.
+
+## Validação e publicação dos alinhamentos — 28/10/2026
+
+- [x] Padronizar alinhamento de ícones, botões, cards e formulários responsivos.
+- [x] Confirmar API pública saudável na revisão 3 e catálogo de planos acessível.
+- [x] Validar integração/race e persistência na branch Neon temporária desta entrega.
+- [x] Executar os fluxos no Chrome com API e banco reais, sem interceptar respostas.
+- [x] Confirmar build final, publicar na Vercel e registrar o estado do deploy.
+
+Os dados usados no teste visual anterior ficaram em um script temporário fora do produto. A aplicação consulta a API; os testes desta entrega usarão persistência real em banco isolado, sem inserir dados de teste em produção.
+
+Evidência desta entrega: branch `verify-alignment-release-20261028` (`br-little-fire-b697r3zg`), migrações conferidas, `go test -race -count=1 ./...`, `go vet ./...`, catálogo de planos, build e TypeScript aprovados. Chrome aprovou pneus/laudos/recapagem/relatórios, limites Starter/Pro, identidade/motorista e administração/suporte. O build final também passou cadastro de identidade Neon, restauração da sessão, logout e login real no formulário. A auditoria de dependências terminou com zero vulnerabilidades após fixar versões transitivas corrigidas.
+
+Produção publicada em 28/10/2026: deployment `dpl_2JghfLZomwGCiM27zrsdzKYrCr2T`, target `production`, estado `READY` conferido pela CLI. Aliases confirmados: `https://geevheittire.vercel.app` e `https://geevheittire-geevheits-projects.vercel.app`. Detalhes e limites da validação em `docs/VALIDACAO_ALINHAMENTO_2026-10-28.md`.
+
+### Correção dos botões dos planos
+
+- [x] Starter: “Avaliar o Starter”; Pro: “Conhecer o Pro”; Enterprise: “Conhecer o Enterprise”.
+- [x] Explicar que a avaliação inicial usa os recursos Starter, preservando os preços provisórios.
+- [x] Conferir os três CTAs no HTML compilado, sem respostas simuladas.
+- [x] Publicar a correção em produção: `dpl_6MykW2djpWLxT9YPJWEqnUVjEjVx`, estado `READY`, alias `https://geevheittire.vercel.app` confirmado. Build e TypeScript local/remoto aprovados.
+
 - [x] Conferir estoque, ficha individual e rastreamento existentes.
 - [x] Registrar laudo de retirada/descarte com ocorrência e condição da carcaça.
 - [x] Preservar laudo e km no histórico, com impressão.

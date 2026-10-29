@@ -33,6 +33,9 @@ func managementError(w http.ResponseWriter, e error) {
 			}
 			problem(w, 422, message)
 			return
+		case "23505":
+			problem(w, 409, "Já existe uma mensalidade em aberto para este cliente. Regularize-a antes de criar outra.")
+			return
 		}
 	}
 	problem(w, 500, "Não foi possível concluir a operação administrativa.")
@@ -88,12 +91,13 @@ func (a *App) platformConfigurePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var d struct {
-		Version   int64  `json:"expected_version"`
-		Price     int    `json:"price_cents"`
-		Vehicles  int    `json:"vehicle_limit"`
-		Users     int    `json:"user_limit"`
-		Published bool   `json:"published"`
-		Reason    string `json:"reason"`
+		Version     int64  `json:"expected_version"`
+		Price       int    `json:"price_cents"`
+		Vehicles    int    `json:"vehicle_limit"`
+		Users       int    `json:"user_limit"`
+		Published   bool   `json:"published"`
+		ApplyLimits bool   `json:"apply_limits"`
+		Reason      string `json:"reason"`
 	}
 	if !decode(w, r, &d) {
 		return
@@ -102,12 +106,13 @@ func (a *App) platformConfigurePlan(w http.ResponseWriter, r *http.Request) {
 		problem(w, 422, "Informe limites válidos e justificativa. Para publicar, defina um valor maior que zero.")
 		return
 	}
-	_, e := a.db.Exec(r.Context(), "select platform_configure_plan($1,$2,$3,$4,$5,$6,$7,$8)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.Reason)
+	var result json.RawMessage
+	e := a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason).Scan(&result)
 	if e != nil {
 		managementError(w, e)
 		return
 	}
-	write(w, 200, map[string]bool{"ok": true})
+	write(w, 200, result)
 }
 func (a *App) platformClientAccess(w http.ResponseWriter, r *http.Request) {
 	if !a.platformOK(w, r) {
@@ -191,9 +196,7 @@ func (a *App) publicPlans(w http.ResponseWriter, r *http.Request) {
 		if offer, ok := offers[p.ID]; ok {
 			item["vehicle_limit"] = offer["vehicle_limit"]
 			item["user_limit"] = offer["user_limit"]
-			if asaasFromEnv() != nil {
-				item["display_price_cents"] = offer["price_cents"]
-			}
+			item["display_price_cents"] = offer["price_cents"]
 		}
 		out = append(out, item)
 	}

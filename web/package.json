@@ -16,6 +16,13 @@
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
+  "overrides": {
+    "better-auth": "1.7.7",
+    "@better-auth/core": "1.7.7",
+    "@better-auth/api-key": "1.7.7",
+    "@react-email/render": "2.2.0",
+    "zod": "4.6.7"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.6.5",
