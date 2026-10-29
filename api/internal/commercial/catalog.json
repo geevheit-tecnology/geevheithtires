@@ -1,0 +1,19 @@
+{
+  "features": {
+    "core_operations": {"name": "Operação essencial", "benefit": "Cadastre veículos e pneus, acompanhe inspeções, mapa, alertas, km e laudos de retirada.", "available": true},
+    "essential_reports": {"name": "Relatórios essenciais", "benefit": "Consulte as 50 ocorrências mais recentes por tipo e abra a ficha de cada pneu.", "available": true},
+    "advanced_lifecycle": {"name": "Ciclo de vida completo", "benefit": "Gerencie envios e retornos de recapagem e transferências entre locais de estoque.", "available": true},
+    "advanced_reports": {"name": "Relatórios avançados", "benefit": "Filtre períodos e consulte todo o histórico de retiradas, recapagens e descartes.", "available": true},
+    "brand_analytics": {"name": "Desempenho e custo por km", "benefit": "Compare marcas e modelos, durabilidade, custo por km, estouros e perdas de carcaça.", "available": true},
+    "custom_policies": {"name": "Regras de manutenção personalizadas", "benefit": "Ajuste limites de desgaste, rodízio, inspeção e recapagens para sua operação.", "available": true},
+    "ai_assistant": {"name": "Inteligência artificial", "benefit": "Assistente e análises com IA.", "available": false},
+    "integrations": {"name": "Integrações", "benefit": "Conexão com ERPs e rastreadores.", "available": false},
+    "public_api": {"name": "API e webhooks", "benefit": "Integração programática com outros sistemas.", "available": false},
+    "multi_branch": {"name": "Gestão de filiais", "benefit": "Operação e estoque separados por filial.", "available": false}
+  },
+  "plans": [
+    {"id": "starter", "name": "Starter", "summary": "Organização e rastreabilidade para a operação do dia a dia.", "vehicle_limit": 15, "user_limit": 3, "features": ["core_operations", "essential_reports"], "planned": []},
+    {"id": "pro", "name": "Pro", "summary": "Controle completo do ciclo de vida e decisões de compra baseadas em dados.", "vehicle_limit": 60, "user_limit": 10, "features": ["core_operations", "essential_reports", "advanced_lifecycle", "advanced_reports", "brand_analytics", "custom_policies"], "planned": ["ai_assistant", "integrations", "multi_branch"]},
+    {"id": "enterprise", "name": "Enterprise", "summary": "Para operações com necessidades e limites definidos em contrato.", "vehicle_limit": null, "user_limit": null, "features": ["core_operations", "essential_reports", "advanced_lifecycle", "advanced_reports", "brand_analytics", "custom_policies"], "planned": ["ai_assistant", "integrations", "public_api", "multi_branch"]}
+  ]
+}

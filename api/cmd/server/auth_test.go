@@ -16,3 +16,16 @@ func TestCNPJ(t *testing.T) {
 		t.Fatal("CNPJ validation failed")
 	}
 }
+
+func TestAlphanumericCNPJ(t *testing.T) {
+	for _, value := range []string{"12ABC34501DE35", "00000000E08G12"} {
+		if !validCNPJ(value) {
+			t.Fatalf("rejected valid alphanumeric CNPJ: %s", value)
+		}
+	}
+	for _, value := range []string{"12ABC34501DE36", "12ABC34501DE3A", "12abc34501DE35", "12ÁBC34501DE35"} {
+		if validCNPJ(value) {
+			t.Fatalf("accepted invalid CNPJ: %s", value)
+		}
+	}
+}

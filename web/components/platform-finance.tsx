@@ -1,0 +1,761 @@
+"use client";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  ArrowDownToLine,
+  ArrowUpRight,
+  FileText,
+  Plus,
+  Wallet,
+  X,
+} from "lucide-react";
+import { api } from "./api";
+import { Plan, money, date } from "./billing-panel";
+type Receivable = {
+  id: string;
+  company_id: string;
+  company_name: string;
+  cnpj: string;
+  plan_id: string;
+  price_cents: number;
+  due_date: string;
+  paid_at: string | null;
+  status: string;
+  source: string;
+  reference: string;
+  version: number;
+  period_end: string | null;
+  checkout_url: string | null;
+};
+type Finance = {
+  data: Receivable[];
+  next_cursor: string;
+  summary: {
+    received_cents: number;
+    pending_cents: number;
+    overdue_cents: number;
+    open_count: number;
+    active_contracts: number;
+  };
+  monthly: { month: string; received_cents: number }[];
+};
+type Client = { id: string; name: string; cnpj: string };
+const states: Record<string, string> = {
+  creating: "Em preparação",
+  pending: "Em aberto",
+  overdue: "Vencida",
+  paid: "Recebida",
+  cancelled: "Cancelada",
+  refunded: "Estornada",
+};
+const today = () =>
+  new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+function monthStart() {
+  return today().slice(0, 7) + "-01";
+}
+export default function PlatformFinance({
+  plans,
+  onChange,
+}: {
+  plans: Plan[];
+  onChange: () => Promise<void>;
+}) {
+  const [data, setData] = useState<Finance | null>(null),
+    [query, setQuery] = useState(() =>
+      new URLSearchParams({ from: monthStart(), to: today() }).toString(),
+    ),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [creating, setCreating] = useState(false),
+    [clients, setClients] = useState<Client[]>([]),
+    [clientSearch, setClientSearch] = useState(""),
+    [action, setAction] = useState<{
+      invoice: Receivable;
+      operation: string;
+    } | null>(null),
+    [plan, setPlan] = useState(plans[0]?.id || "starter"),
+    [price, setPrice] = useState(String((plans[0]?.price_cents || 0) / 100));
+  const dialog = useRef<HTMLDialogElement>(null),
+    createID = useRef("");
+  const load = useCallback(
+    async (q = query, append = false) => {
+      try {
+        const out = await api(`platform/finance?${q}`);
+        setData((old) =>
+          append && old ? { ...out, data: [...old.data, ...out.data] } : out,
+        );
+        setError("");
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    [query],
+  );
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useEffect(() => {
+    const refresh = () => {
+      if (
+        document.visibilityState === "visible" &&
+        !busy &&
+        !action &&
+        !creating
+      )
+        void load();
+    };
+    const timer = setInterval(refresh, 15000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [load, busy, action, creating]);
+  useEffect(() => {
+    if (action) dialog.current?.showModal();
+    else dialog.current?.close();
+  }, [action]);
+  useEffect(() => {
+    if (!action) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [action]);
+  async function searchClients() {
+    try {
+      const out = await api(
+        `platform/clients?search=${encodeURIComponent(clientSearch)}`,
+      );
+      setClients(out.data);
+      setError("");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  async function startCreate() {
+    setCreating(true);
+    createID.current = crypto.randomUUID();
+    setNotice("");
+    await searchClients();
+  }
+  async function create(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    setError("");
+    try {
+      await api("platform/finance", {
+        id: createID.current,
+        company_id: f.get("company_id"),
+        plan_id: plan,
+        price_cents: Math.round(Number(price) * 100),
+        due_date: f.get("due_date"),
+        checkout_url: f.get("checkout_url") || "",
+        reason: f.get("reason"),
+      });
+      setCreating(false);
+      setNotice(
+        "Mensalidade registrada. Ela já aparece no painel do cliente; nenhum pagamento foi confirmado.",
+      );
+      await load();
+      await onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function settle(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!action) return;
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    setError("");
+    try {
+      await api(
+        `platform/finance/${action.invoice.id}`,
+        {
+          expected_version: action.invoice.version,
+          operation: action.operation,
+          reference: f.get("reference") || "",
+          paid_on: f.get("paid_on") || "",
+          reason: f.get("reason"),
+        },
+        "PATCH",
+      );
+      setNotice(
+        action.operation === "pay"
+          ? "Recebimento confirmado e um mês de acesso aplicado ao cliente."
+          : action.operation === "refund"
+            ? "Estorno registrado. A vigência foi revista conforme esta mensalidade."
+            : "Mensalidade cancelada. Nenhum recebimento registrado.",
+      );
+      setAction(null);
+      await load();
+      await onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function exportRows() {
+    if (!data) return;
+    const cell = (v: unknown) => {
+      let s = String(v ?? "");
+      if (/^[=+@\-\t\r]/.test(s)) s = "'" + s;
+      return '"' + s.replaceAll('"', '""') + '"';
+    };
+    const lines = [
+      [
+        "Empresa",
+        "CNPJ",
+        "Plano",
+        "Valor (R$)",
+        "Vencimento",
+        "Situação",
+        "Recebido em",
+        "Origem",
+        "Referência",
+      ],
+      ...data.data.map((r) => [
+        r.company_name,
+        r.cnpj,
+        r.plan_id,
+        (r.price_cents / 100).toFixed(2).replace(".", ","),
+        date(r.due_date),
+        states[r.status] || r.status,
+        r.paid_at ? date(r.paid_at) : "",
+        r.source === "manual" ? "Registro manual" : "Asaas",
+        r.reference,
+      ]),
+    ];
+    const url = URL.createObjectURL(
+      new Blob(
+        ["\uFEFF" + lines.map((r) => r.map(cell).join(";")).join("\r\n")],
+        { type: "text/csv;charset=utf-8" },
+      ),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mensalidades-geevheittire.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  const max = Math.max(
+    1,
+    ...(data?.monthly.map((m) => m.received_cents) || []),
+  );
+  return (
+    <>
+      <div className="admin-finance-toolbar">
+        <div>
+          <span className="label">CONTROLE DE MENSALIDADES</span>
+          <p>
+            Registre títulos e confirme somente pagamentos recebidos. Asaas
+            permanece independente deste controle manual.
+          </p>
+        </div>
+        <button
+          className="button"
+          onClick={() => void startCreate()}
+          disabled={busy}
+        >
+          <Plus size={18} />
+          Registrar mensalidade
+        </button>
+      </div>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p className="success" role="status">
+          {notice}
+        </p>
+      )}
+      {creating && (
+        <section className="surface management-section admin-create-receivable">
+          <div className="admin-section-heading">
+            <h2>Nova mensalidade</h2>
+            <button
+              className="icon-button"
+              aria-label="Fechar nova mensalidade"
+              disabled={busy}
+              onClick={() => setCreating(false)}
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <form onSubmit={create}>
+            <fieldset className="plain-fields" disabled={busy}>
+              <div className="admin-client-search">
+                <label>
+                  Buscar empresa
+                  <input
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                    maxLength={150}
+                    placeholder="Nome ou CNPJ"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button outline"
+                  onClick={() => void searchClients()}
+                >
+                  Buscar empresa
+                </button>
+              </div>
+              <label>
+                Cliente da mensalidade
+                <select name="company_id" required>
+                  <option value="">Selecione uma empresa</option>
+                  {clients.map((c) => (
+                    <option value={c.id} key={c.id}>
+                      {c.name} · {c.cnpj}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="form-grid">
+                <label>
+                  Plano da mensalidade
+                  <select
+                    value={plan}
+                    onChange={(e) => {
+                      setPlan(e.target.value);
+                      setPrice(
+                        String(
+                          (plans.find((p) => p.id === e.target.value)
+                            ?.price_cents || 0) / 100,
+                        ),
+                      );
+                    }}
+                  >
+                    {plans.map((p) => (
+                      <option value={p.id} key={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Valor da mensalidade (R$)
+                  <input
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    type="number"
+                    min="0.01"
+                    max="1000000"
+                    step="0.01"
+                    required
+                  />
+                </label>
+                <label>
+                  Vencimento
+                  <input
+                    name="due_date"
+                    type="date"
+                    defaultValue={today()}
+                    required
+                  />
+                </label>
+                <label>
+                  Link de pagamento (opcional)
+                  <input
+                    name="checkout_url"
+                    type="url"
+                    maxLength={2000}
+                    placeholder="https://…"
+                  />
+                  <small>
+                    Informe somente um link já existente. Não será gerada
+                    cobrança externa.
+                  </small>
+                </label>
+              </div>
+              <label>
+                Justificativa da mensalidade
+                <textarea
+                  name="reason"
+                  required
+                  minLength={5}
+                  maxLength={500}
+                  rows={3}
+                />
+              </label>
+              <button className="button">Salvar mensalidade</button>
+            </fieldset>
+          </form>
+        </section>
+      )}
+      <section className="surface management-section">
+        <form
+          className="report-filters"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setQuery(
+              new URLSearchParams(
+                Object.fromEntries(new FormData(e.currentTarget)) as Record<
+                  string,
+                  string
+                >,
+              ).toString(),
+            );
+            setNotice("");
+          }}
+        >
+          <label>
+            De
+            <input
+              name="from"
+              type="date"
+              defaultValue={monthStart()}
+              required
+            />
+          </label>
+          <label>
+            Até
+            <input name="to" type="date" defaultValue={today()} required />
+          </label>
+          <label>
+            Situação da mensalidade
+            <select name="status">
+              <option value="">Todas</option>
+              {Object.entries(states)
+                .filter(([s]) => s !== "creating")
+                .map(([s, n]) => (
+                  <option value={s} key={s}>
+                    {n}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            Buscar empresa no financeiro
+            <input name="search" maxLength={150} placeholder="Nome ou CNPJ" />
+          </label>
+          <button className="button" disabled={busy}>
+            Filtrar financeiro
+          </button>
+        </form>
+        <p className="caption">
+          Recebido considera a data do pagamento. Em aberto e vencido consideram
+          o vencimento no período. A lista usa o vencimento; os indicadores
+          incluem todas as situações.
+        </p>
+      </section>
+      {data && (
+        <>
+          <div className="admin-metrics">
+            {[
+              [
+                "Recebido no período",
+                money(data.summary.received_cents),
+                "Pagamentos confirmados",
+              ],
+              [
+                "A receber no período",
+                money(data.summary.pending_cents),
+                "Títulos ainda não vencidos",
+              ],
+              [
+                "Vencido no período",
+                money(data.summary.overdue_cents),
+                "Priorize a regularização",
+              ],
+              [
+                "Mensalidades em aberto",
+                data.summary.open_count,
+                `${data.summary.active_contracts} contrato(s) ativo(s)`,
+              ],
+            ].map(([name, value, help]) => (
+              <article className="admin-metric" key={name}>
+                <div>
+                  <span>{name}</span>
+                  <Wallet size={18} />
+                </div>
+                <strong>{value}</strong>
+                <small>{help}</small>
+              </article>
+            ))}
+          </div>
+          <section className="surface management-section">
+            <div className="admin-section-heading">
+              <div>
+                <span className="label">EVOLUÇÃO DOS RECEBIMENTOS</span>
+                <h2>Últimos seis meses</h2>
+              </div>
+              <span className="admin-status neutral">Toda a plataforma</span>
+            </div>
+            <div
+              className="admin-revenue-chart"
+              role="img"
+              aria-label="Recebimentos confirmados por mês nos últimos seis meses"
+            >
+              {data.monthly.map((m) => (
+                <div key={m.month}>
+                  <strong>{money(m.received_cents)}</strong>
+                  <div className="admin-bar-track">
+                    <span
+                      style={{ height: `${(m.received_cents / max) * 100}%` }}
+                    />
+                  </div>
+                  <small>
+                    {new Date(m.month + "-01T12:00:00Z").toLocaleDateString(
+                      "pt-BR",
+                      { month: "short", year: "2-digit", timeZone: "UTC" },
+                    )}
+                  </small>
+                </div>
+              ))}
+            </div>
+            {data.monthly.every((m) => m.received_cents === 0) && (
+              <p className="caption">
+                Nenhum recebimento confirmado nos últimos seis meses.
+              </p>
+            )}
+          </section>
+          <section className="surface management-section">
+            <div className="admin-section-heading">
+              <h2>Mensalidades e recebimentos</h2>
+              <button
+                className="button outline small"
+                onClick={exportRows}
+                disabled={!data.data.length}
+              >
+                <ArrowDownToLine size={16} />
+                Exportar exibidos
+              </button>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Cliente / plano</th>
+                    <th>Valor / vencimento</th>
+                    <th>Situação</th>
+                    <th>Recebimento</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.data.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <strong>{r.company_name}</strong>
+                        <small>
+                          {plans.find((p) => p.id === r.plan_id)?.name ||
+                            r.plan_id}{" "}
+                          · {r.cnpj}
+                        </small>
+                      </td>
+                      <td>
+                        {money(r.price_cents)}
+                        <small>{date(r.due_date)}</small>
+                      </td>
+                      <td>
+                        <span
+                          className={`admin-status ${r.status === "paid" ? "positive" : r.status === "overdue" ? "negative" : "neutral"}`}
+                        >
+                          {states[r.status] || r.status}
+                        </span>
+                        <small>
+                          {r.source === "manual" ? "Registro manual" : "Asaas"}
+                        </small>
+                      </td>
+                      <td>
+                        {r.paid_at ? date(r.paid_at) : "—"}
+                        <small>
+                          {r.reference || "Sem referência de recebimento"}
+                        </small>
+                        {r.period_end && (
+                          <small>
+                            Acesso aplicado até {date(r.period_end)}
+                          </small>
+                        )}
+                      </td>
+                      <td>
+                        <div className="commercial-actions">
+                          {r.source === "manual" &&
+                            ["pending", "overdue"].includes(r.status) && (
+                              <>
+                                <button
+                                  className="table-link"
+                                  onClick={() => {
+                                    setError("");
+                                    setAction({ invoice: r, operation: "pay" });
+                                  }}
+                                >
+                                  Confirmar recebimento
+                                </button>
+                                <button
+                                  className="table-link"
+                                  onClick={() => {
+                                    setError("");
+                                    setAction({
+                                      invoice: r,
+                                      operation: "cancel",
+                                    });
+                                  }}
+                                >
+                                  Cancelar mensalidade
+                                </button>
+                              </>
+                            )}
+                          {r.source === "manual" && r.status === "paid" && (
+                            <button
+                              className="table-link"
+                              onClick={() => {
+                                setError("");
+                                setAction({ invoice: r, operation: "refund" });
+                              }}
+                            >
+                              Registrar estorno
+                            </button>
+                          )}
+                          {r.checkout_url && (
+                            <a
+                              className="table-link"
+                              href={r.checkout_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Abrir pagamento <ArrowUpRight size={13} />
+                            </a>
+                          )}
+                          {r.source !== "manual" && (
+                            <small>Atualizado pelo provedor</small>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!data.data.length && (
+              <div className="empty-state">
+                <FileText />
+                <h3>Nenhuma mensalidade neste filtro</h3>
+                <p>
+                  Registre uma mensalidade ou amplie o período para consultar o
+                  histórico.
+                </p>
+              </div>
+            )}
+            {data.next_cursor && (
+              <button
+                className="button outline"
+                onClick={() =>
+                  void load(`${query}&before=${data.next_cursor}`, true)
+                }
+              >
+                Carregar mais mensalidades
+              </button>
+            )}
+          </section>
+        </>
+      )}
+      <dialog
+        ref={dialog}
+        className="admin-finance-dialog"
+        aria-label="Atualizar mensalidade"
+        onCancel={(e) => {
+          e.preventDefault();
+          if (!busy) setAction(null);
+        }}
+      >
+        {action && (
+          <>
+            <div className="admin-section-heading">
+              <h2>
+                {action.operation === "pay"
+                  ? "Confirmar recebimento"
+                  : action.operation === "refund"
+                    ? "Registrar estorno"
+                    : "Cancelar mensalidade"}
+              </h2>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Fechar atualização"
+                disabled={busy}
+                onClick={() => setAction(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p>
+              <strong>{action.invoice.company_name}</strong> ·{" "}
+              {money(action.invoice.price_cents)}
+            </p>
+            <p>
+              {action.operation === "pay"
+                ? "Confirme somente após verificar o pagamento. A confirmação libera um mês de acesso com o plano e os limites desta mensalidade."
+                : action.operation === "refund"
+                  ? "O recebimento será estornado no controle. Se esta mensalidade ainda determinar a vigência atual, o acesso pago será encerrado. O estorno bancário deve ter sido realizado separadamente."
+                  : "Este título deixará de ficar em aberto. A vigência do cliente será preservada."}
+            </p>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            <form onSubmit={settle}>
+              <fieldset className="plain-fields" disabled={busy}>
+                {action.operation === "pay" && (
+                  <>
+                    <label>
+                      Referência do recebimento
+                      <input
+                        name="reference"
+                        minLength={3}
+                        maxLength={200}
+                        required
+                        placeholder="Comprovante, transação ou referência bancária"
+                      />
+                    </label>
+                    <label>
+                      Data do recebimento
+                      <input
+                        name="paid_on"
+                        type="date"
+                        max={today()}
+                        defaultValue={today()}
+                        required
+                      />
+                    </label>
+                  </>
+                )}
+                <label>
+                  Justificativa da operação
+                  <textarea
+                    name="reason"
+                    rows={3}
+                    minLength={5}
+                    maxLength={500}
+                    required
+                  />
+                </label>
+                <label className="checkbox">
+                  <input type="checkbox" required />
+                  <span>Conferi os dados e confirmo esta operação.</span>
+                </label>
+                <button
+                  className={`button ${action.operation === "pay" ? "" : "danger"}`}
+                >
+                  {busy ? "Salvando…" : "Confirmar operação"}
+                </button>
+              </fieldset>
+            </form>
+          </>
+        )}
+      </dialog>
+    </>
+  );
+}

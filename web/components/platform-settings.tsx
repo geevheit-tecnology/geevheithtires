@@ -1,0 +1,319 @@
+"use client";
+import { FormEvent, useState } from "react";
+import { LogOut, ShieldCheck } from "lucide-react";
+import { api } from "./api";
+import { PlanBenefits } from "./plan-access";
+import { planCatalog } from "../lib/plan-catalog";
+import type { AdminPlan, AdminIdentity } from "./platform-admin";
+export function AdminPlans({
+  plans,
+  onChange,
+}: {
+  plans: AdminPlan[];
+  onChange: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+  async function save(e: FormEvent<HTMLFormElement>, p: AdminPlan) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const out = await api(
+        `platform/plans/${p.id}`,
+        {
+          expected_version: p.version,
+          price_cents: Math.round(Number(f.get("price")) * 100),
+          vehicle_limit: Number(f.get("vehicle_limit")),
+          user_limit: Number(f.get("user_limit")),
+          published: f.get("published") === "on",
+          apply_limits: f.get("apply_limits") === "on",
+          reason: f.get("reason"),
+        },
+        "PUT",
+      );
+      setNotice(
+        `Plano ${p.name} salvo. ${f.get("published") === "on" ? "Preço e limites publicados na plataforma." : "Condições mantidas em rascunho."}${out.clients_updated ? ` Limites atualizados em ${out.clients_updated} cliente(s).` : " Mensalidades existentes preservadas."}`,
+      );
+      await onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <div className="info admin-publication-note">
+        <ShieldCheck size={20} />
+        <p>
+          Publicar atualiza o preço e os limites no site e no painel dos
+          clientes. A sincronização opcional aplica os limites aos clientes já
+          vinculados. Mensalidades registradas preservam as condições originais.
+        </p>
+      </div>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="success">
+          {notice}
+        </p>
+      )}
+      <div className="admin-plan-grid">
+        {plans.map((p) => {
+          const spec = planCatalog.find((s) => s.id === p.id);
+          return (
+            <article
+              className="surface admin-plan-card"
+              key={`${p.id}-${p.version}`}
+            >
+              <div className="admin-plan-heading">
+                <span className="label">
+                  {p.id === "enterprise"
+                    ? "CONDIÇÕES PERSONALIZÁVEIS"
+                    : "PLANO DA PLATAFORMA"}
+                </span>
+                <h2>{p.name}</h2>
+                <span
+                  className={`admin-status ${p.published ? "positive" : "neutral"}`}
+                >
+                  {p.published ? "Publicado no site" : "Em rascunho"}
+                </span>
+                <p>{spec?.summary}</p>
+              </div>
+              <form onSubmit={(e) => void save(e, p)}>
+                <fieldset className="plain-fields" disabled={busy}>
+                  <label>
+                    Valor mensal de {p.name} (R$)
+                    <input
+                      type="number"
+                      name="price"
+                      step="0.01"
+                      min="0"
+                      max="1000000"
+                      defaultValue={p.price_cents / 100}
+                      required
+                    />
+                  </label>
+                  <div className="form-grid">
+                    <label>
+                      Veículos de {p.name}
+                      <input
+                        type="number"
+                        name="vehicle_limit"
+                        min="1"
+                        max="100000"
+                        defaultValue={p.vehicle_limit}
+                        required
+                      />
+                    </label>
+                    <label>
+                      Usuários de {p.name}
+                      <input
+                        type="number"
+                        name="user_limit"
+                        min="1"
+                        max="10000"
+                        defaultValue={p.user_limit}
+                        required
+                      />
+                    </label>
+                  </div>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      name="published"
+                      defaultChecked={p.published}
+                    />
+                    <span>
+                      Publicar preço e limites na plataforma
+                      <small>
+                        Para publicar, informe um valor maior que zero.
+                      </small>
+                    </span>
+                  </label>
+                  <label className="checkbox">
+                    <input type="checkbox" name="apply_limits" />
+                    <span>
+                      Atualizar limites dos clientes deste plano
+                      <small>
+                        O sistema impede limites menores que o uso atual de
+                        qualquer cliente.
+                      </small>
+                    </span>
+                  </label>
+                  <label>
+                    Justificativa para alterar {p.name}
+                    <textarea
+                      name="reason"
+                      rows={3}
+                      minLength={5}
+                      maxLength={500}
+                      required
+                    />
+                  </label>
+                  <button className="button" disabled={busy}>
+                    {busy ? "Salvando…" : `Salvar plano ${p.name}`}
+                  </button>
+                </fieldset>
+              </form>
+              {spec && (
+                <details className="admin-benefits">
+                  <summary>Recursos e benefícios do {p.name}</summary>
+                  <PlanBenefits
+                    features={spec.features}
+                    planned={spec.planned}
+                  />
+                </details>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+export function AdminProfile({
+  profile,
+  onChange,
+  onLogout,
+}: {
+  profile: AdminIdentity;
+  onChange: () => Promise<void>;
+  onLogout: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget,
+      f = new FormData(form);
+    if (f.get("new_password") !== f.get("confirmation")) {
+      setError("A confirmação da nova senha não corresponde.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await api(
+        "platform/profile",
+        {
+          name: f.get("name"),
+          current_password: f.get("current_password"),
+          new_password: f.get("new_password") || "",
+        },
+        "PATCH",
+      );
+      form.reset();
+      setNotice(
+        "Perfil salvo. Sua sessão atual foi renovada. Se a senha mudou, as sessões anteriores foram encerradas.",
+      );
+      await onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="admin-account-grid">
+      <section className="surface management-section">
+        <span className="label">SEU PERFIL</span>
+        <h2>Dados e senha</h2>
+        <p>{profile.email}</p>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        {notice && (
+          <p className="success" role="status">
+            {notice}
+          </p>
+        )}
+        <form onSubmit={save}>
+          <fieldset disabled={busy} className="plain-fields">
+            <label>
+              Seu nome
+              <input
+                name="name"
+                defaultValue={profile.name}
+                minLength={2}
+                maxLength={100}
+                required
+                autoComplete="name"
+              />
+            </label>
+            <label>
+              Senha atual
+              <input
+                name="current_password"
+                type="password"
+                minLength={10}
+                maxLength={128}
+                required
+                autoComplete="current-password"
+              />
+            </label>
+            {!profile.managed_identity && (
+              <>
+                <label>
+                  Nova senha
+                  <input
+                    name="new_password"
+                    type="password"
+                    minLength={10}
+                    maxLength={128}
+                    autoComplete="new-password"
+                  />
+                  <small>Deixe em branco para manter a senha atual.</small>
+                </label>
+                <label>
+                  Confirmar nova senha
+                  <input
+                    name="confirmation"
+                    type="password"
+                    minLength={10}
+                    maxLength={128}
+                    autoComplete="new-password"
+                  />
+                </label>
+              </>
+            )}
+            <button className="button">
+              {busy ? "Salvando…" : "Salvar meus dados"}
+            </button>
+          </fieldset>
+        </form>
+      </section>
+      <section className="admin-security-card">
+        <ShieldCheck size={32} />
+        <h2>Seu acesso protegido</h2>
+        <p>
+          A senha atual confirma que é você quem está alterando a conta. Ao
+          trocar a senha, as sessões anteriores são revogadas e esta sessão é
+          renovada.
+        </p>
+        <p>
+          Seu acesso administrativo é separado das contas dos clientes. Alterar
+          sua senha não muda senhas, planos ou dados das empresas.
+        </p>
+        <button
+          className="button outline"
+          onClick={() => void onLogout()}
+          disabled={busy}
+        >
+          <LogOut size={18} />
+          Sair desta sessão
+        </button>
+      </section>
+    </div>
+  );
+}

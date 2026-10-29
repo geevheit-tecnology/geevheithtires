@@ -1,0 +1,3 @@
+# Fixed QA passwords for synthetic accounts, not provider keys or production credentials.
+9f973ab2c488a09eb78a8216e2165bf84d36be3a:scripts/neon-e2e.cjs:generic-api-key:31
+ceee76743a9919451618138560001f6ab3bf8aa8:api/cmd/server/integration_test.go:generic-api-key:213
