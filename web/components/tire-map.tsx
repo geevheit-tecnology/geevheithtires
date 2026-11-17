@@ -17,6 +17,13 @@ export type Tire = {
   dot_code?: string | null;
   expires_on?: string | null;
   road_use?: string;
+  model?: string;
+  photo_data?: string | null;
+  photo_thumb?: string | null;
+  has_photo?: boolean;
+  pressure_psi?: number | null;
+  purchase_supplier?: string | null;
+  notes?: string | null;
 };
 export function TireMap({
   positions,

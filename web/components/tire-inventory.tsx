@@ -6,6 +6,8 @@ import {TireIdentityEditor,roadNames} from "./tire-identity-fields";
 import {usePlanAccess,UpgradeNotice} from "./plan-access";
 import {positionLabel} from "../lib/tire-position";
 import {RemovalReportFields, RemovalReportView, RemovalReport} from "./tire-removal-report";
+import {TireViewer360AR} from "./tire-viewer-360-ar";
+import {TireLoader} from "./tire-loader";
 type Vehicle = { id: string; plate: string; current_km: number };
 type Asset = Tire & {
   vehicle_id?: string;
@@ -389,7 +391,59 @@ export default function TireInventory({
           {error}
         </div>
       )}
-      <section className="surface table-wrap">
+      <div className="tire-cards-mobile">
+        {tires
+          .filter(
+            (t) =>
+              (!filter || t.state === filter) &&
+              `${t.code} ${t.serial_number || ""} ${t.dot_code || ""} ${t.brand} ${t.size}`
+                .toLowerCase()
+                .includes(search.toLowerCase()),
+          )
+          .map((t) => {
+            const pct = Math.max(8, Math.min(100, Math.round((t.tread_mm / 18) * 100)));
+            const loc = t.vehicle_id
+              ? `${vehicles.find((v) => v.id === t.vehicle_id)?.plate || "Veículo"} · ${t.position}`
+              : t.state === "EM_ESTOQUE"
+                ? t.stock_location || "Principal"
+                : "—";
+            return (
+              <button
+                type="button"
+                key={`card-${t.id}`}
+                className="tire-visual-card"
+                onClick={() => {
+                  setDetails(null);
+                  setAction("");
+                  void open(t.id);
+                }}
+              >
+                <div className="tire-visual-thumb">
+                  {t.photo_thumb ? (
+                    <img src={t.photo_thumb} alt={`Pneu ${t.code}`} />
+                  ) : (
+                    <span>360°</span>
+                  )}
+                </div>
+                <div className="tire-visual-meta">
+                  <div className="tire-visual-top">
+                    <strong>{t.code}</strong>
+                    <span className={`pill ${t.status}`}>{t.tread_mm} mm</span>
+                  </div>
+                  <small>{t.brand} · {t.size}</small>
+                  <div className="tread-bar" aria-hidden="true">
+                    <span className={t.status} style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="tire-visual-foot">
+                    <span>{loc}</span>
+                    <b>360° / AR →</b>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+      </div>
+      <section className="surface table-wrap tire-table-desktop">
         <table>
           <thead>
             <tr>
@@ -413,8 +467,17 @@ export default function TireInventory({
               .map((t) => (
                 <tr key={t.id}>
                   <td>
-                    <button className="table-link" onClick={() => { setDetails(null); setAction(""); void open(t.id); }}>{t.code}</button>
-                    <small>Série: {t.serial_number||"Não informada"}</small>
+                    <div className="tire-cell-with-thumb">
+                      {t.photo_thumb ? (
+                        <img src={t.photo_thumb} alt="" className="tire-mini-thumb" />
+                      ) : (
+                        <span className="tire-mini-badge">360°</span>
+                      )}
+                      <div>
+                        <button className="table-link" onClick={() => { setDetails(null); setAction(""); void open(t.id); }}>{t.code}</button>
+                        <small>Série: {t.serial_number||"Não informada"}</small>
+                      </div>
+                    </div>
                   </td>
                   <td>
                     {t.brand}
@@ -440,7 +503,7 @@ export default function TireInventory({
                         void open(t.id);
                       }}
                     >
-                      Dados e histórico →
+                      360° e histórico →
                     </button>
                   </td>
                 </tr>
@@ -455,17 +518,17 @@ export default function TireInventory({
       </section>
       </div>
       <dialog ref={dialogRef} className="tire-dossier-dialog" aria-label="Dados e histórico do pneu" onCancel={e => { e.preventDefault(); close(); }}>
-      <div className="dossier-toolbar"><strong>Dados e histórico do pneu</strong><button type="button" className="table-link" disabled={busy} onClick={close} autoFocus>Fechar</button></div>
-      {loading && <p role="status">Carregando histórico…</p>}
+      <div className="dossier-toolbar"><strong>Visão 360° · Dossiê do pneu</strong><button type="button" className="table-link" disabled={busy} onClick={close} autoFocus>Fechar</button></div>
+      {loading && <TireLoader compact label="Carregando visão 360° e histórico…" />}
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <p className="info" role="status">{notice}</p>}
       {asset && (
         <section className="surface lifecycle-details">
           <div className="surface-title">
             <div>
-              <span className="label">DOSSIÊ DO PNEU</span>
+              <span className="label">DOSSIÊ VISUAL 360° &amp; HISTÓRICO</span>
               <h2>
-                {asset.code} · {asset.brand}
+                {asset.code} · {asset.brand} {asset.model || ""}
               </h2>
             </div>
             <button
@@ -476,6 +539,28 @@ export default function TireInventory({
               Fechar
             </button>
           </div>
+          <TireViewer360AR
+            code={asset.code}
+            brand={asset.brand || ""}
+            model={asset.model || ""}
+            size={asset.size || ""}
+            treadMm={asset.tread_mm}
+            pressurePsi={asset.pressure_psi}
+            retreadCount={asset.retread_count}
+            status={asset.status}
+            photoData={asset.photo_data}
+            canEdit={move && access.can_write}
+            savingPhoto={busy}
+            onSavePhoto={async (photoData, photoThumb) => {
+              await api(`tires/${asset.id}/photo`, {
+                expected_version: asset.version,
+                photo_data: photoData,
+                photo_thumb: photoThumb,
+              }, "PATCH");
+              await onChange();
+              await open(asset.id);
+            }}
+          />
           <p>
             {stateNames[asset.state || ""]} ·{" "}
             {asset.plate
@@ -494,6 +579,71 @@ export default function TireInventory({
             <p><strong>Motorista do veículo</strong><br/>{asset.driver_name||"Não vinculado"}</p>
           </div>
           {manage&&<TireIdentityEditor tire={asset} onSaved={async()=>{await onChange();await open(asset.id)}}/>}
+          {move && access.can_write && (
+            <details className="surface lifecycle-policy">
+              <summary>Pressão nominal, fornecedor e observações</summary>
+              <form
+                onSubmit={async (ev) => {
+                  ev.preventDefault();
+                  setBusy(true);
+                  setError("");
+                  try {
+                    const fd = new FormData(ev.currentTarget);
+                    const psiRaw = String(fd.get("pressure_psi") || "").trim();
+                    await api(`tires/${asset.id}/media`, {
+                      expected_version: asset.version,
+                      pressure_psi: psiRaw ? Number(psiRaw) : null,
+                      purchase_supplier: String(fd.get("purchase_supplier") || ""),
+                      notes: String(fd.get("notes") || ""),
+                    }, "PATCH");
+                    setNotice("Campos adicionais salvos com segurança.");
+                    await onChange();
+                    await open(asset.id);
+                  } catch (err) {
+                    setError((err as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <div className="form-grid">
+                  <label>
+                    Pressão recomendada / atual (PSI)
+                    <input
+                      name="pressure_psi"
+                      type="number"
+                      min="0"
+                      max="250"
+                      step="0.5"
+                      defaultValue={asset.pressure_psi ?? ""}
+                      placeholder="Ex: 110"
+                    />
+                  </label>
+                  <label>
+                    Fornecedor de compra
+                    <input
+                      name="purchase_supplier"
+                      maxLength={150}
+                      defaultValue={asset.purchase_supplier || ""}
+                      placeholder="Ex: Distribuidora Sul"
+                    />
+                  </label>
+                  <label>
+                    Observações técnicas
+                    <input
+                      name="notes"
+                      maxLength={500}
+                      defaultValue={asset.notes || ""}
+                      placeholder="Ex: Sulco uniforme, sem cortes"
+                    />
+                  </label>
+                </div>
+                <button className="button small" disabled={busy}>
+                  {busy ? "Salvando…" : "Salvar campos"}
+                </button>
+              </form>
+            </details>
+          )}
           <div className="lifecycle-facts">
             <p>
               <strong>{number(asset.total_tracked_km)} km</strong>

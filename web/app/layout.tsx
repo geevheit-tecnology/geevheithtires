@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { PwaRegister } from "../components/pwa-register";
 export const metadata: Metadata = {
   applicationName: "GeevheitTire",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "GeevheitTire", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "GeevheitTire", statusBarStyle: "black-translucent" },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -17,11 +18,19 @@ export const metadata: Metadata = {
   description:
     "Gestão de pneus para transportadoras. Controle sua frota, acompanhe inspeções e transforme dados em decisões.",
 };
-export const viewport: Viewport = { themeColor: "#293c38" };
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#14201d",
+};
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        <PwaRegister />
+        {children}
+      </body>
     </html>
   );
 }

@@ -14,7 +14,11 @@ import {
   X,
   CheckCircle2,
   RefreshCw,
+  Camera,
+  Menu,
 } from "lucide-react";
+import { TireLoader } from "./tire-loader";
+import { optimizeTirePhoto, OptimizedTirePhoto } from "../lib/image-optimize";
 import { Brand } from "./brand";
 import { api } from "./api";
 import BillingPanel from "./billing-panel";
@@ -102,6 +106,9 @@ export default function Panel() {
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [newTirePhoto, setNewTirePhoto] = useState<OptimizedTirePhoto | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const manage = user?.role === "owner" || user?.role === "manager";
   useEffect(() => {
     if (!modal) return;
@@ -219,6 +226,15 @@ export default function Panel() {
       if (!data.vehicle_id) {
         delete data.vehicle_id;
         delete data.position;
+      }
+      if (data.pressure_psi !== undefined && data.pressure_psi !== "") {
+        data.pressure_psi = Number(data.pressure_psi);
+      } else {
+        delete data.pressure_psi;
+      }
+      if (newTirePhoto) {
+        data.photo_data = newTirePhoto.photoData;
+        data.photo_thumb = newTirePhoto.photoThumb;
       }
     }
     if (modal === "users") endpoint = "users/invite";
@@ -356,7 +372,7 @@ export default function Panel() {
             </div>
           )}
           {loaded&&<div className="plan-context"><span className="plan-level">{access.plan_name}</span><span>{access.status==="trial"?"Avaliação com recursos Starter":access.can_write?"Recursos do seu plano":"Acesso para consulta"} · até {access.vehicle_limit} veículos e {access.user_limit} usuários</span><button className="table-link" onClick={()=>setTab("plan")}>Ver benefícios</button></div>}
-          {!loaded && !error && <p>Carregando sua operação…</p>}
+          {!loaded && !error && <TireLoader />}
           {tab === "dashboard" && (
             <>
               {manage && loaded && <section className="registration-actions" aria-label="Cadastros da gestão de pneus">
@@ -817,6 +833,75 @@ export default function Panel() {
                         required
                       />
                     </label>
+                    <label>
+                      Pressão recomendada (PSI)
+                      <input
+                        name="pressure_psi"
+                        type="number"
+                        min="0"
+                        max="250"
+                        step="0.5"
+                        placeholder="Ex: 110"
+                      />
+                    </label>
+                    <label>
+                      Fornecedor de compra
+                      <input
+                        name="purchase_supplier"
+                        maxLength={150}
+                        placeholder="Ex: Distribuidora Sul"
+                      />
+                    </label>
+                    <label>
+                      Observações técnicas
+                      <input
+                        name="notes"
+                        maxLength={500}
+                        placeholder="Condição visual, lote, etc."
+                      />
+                    </label>
+                  </div>
+                  <div className="tire-photo-upload-box">
+                    <label className="button outline small" style={{ width: "fit-content" }}>
+                      <Camera size={16} />
+                      {photoBusy
+                        ? "Otimizando foto…"
+                        : newTirePhoto
+                          ? `Foto otimizada (${newTirePhoto.sizeKB} KB) · Trocar`
+                          : "Tirar ou anexar foto do pneu (para 360° / AR)"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        hidden
+                        onChange={async (ev) => {
+                          const f = ev.target.files?.[0];
+                          ev.target.value = "";
+                          if (!f) return;
+                          setPhotoBusy(true);
+                          setError("");
+                          try {
+                            setNewTirePhoto(await optimizeTirePhoto(f));
+                          } catch (err) {
+                            setError((err as Error).message);
+                          } finally {
+                            setPhotoBusy(false);
+                          }
+                        }}
+                      />
+                    </label>
+                    {newTirePhoto && (
+                      <div className="tire-photo-upload-preview">
+                        <img src={newTirePhoto.photoThumb} alt="Prévia da foto do pneu" />
+                        <button
+                          type="button"
+                          className="table-link"
+                          onClick={() => setNewTirePhoto(null)}
+                        >
+                          Remover foto
+                        </button>
+                      </div>
+                    )}
                   </div>
                   </fieldset>
                   <fieldset className="registration-fields"><legend>Destino do pneu</legend>
@@ -953,6 +1038,80 @@ export default function Panel() {
               </button>
             </form>
           </section>
+        </div>
+      )}
+      <nav className="mobile-bottom-nav" aria-label="Navegação principal do aplicativo">
+        {[
+          { id: "dashboard", label: "Painel", icon: LayoutDashboard },
+          { id: "vehicles", label: "Veículos", icon: Truck },
+          { id: "tires", label: "Pneus", icon: CircleDot },
+          { id: "alerts", label: "Alertas", icon: Bell, badge: dash?.alerts || 0 },
+        ].map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={tab === item.id ? "active" : ""}
+            onClick={() => {
+              setTab(item.id);
+              setSearch("");
+              setMobileMoreOpen(false);
+            }}
+          >
+            <item.icon size={20} />
+            <span>{item.label}</span>
+            {!!item.badge && <i className="mobile-nav-badge">{item.badge}</i>}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={mobileMoreOpen || !["dashboard", "vehicles", "tires", "alerts"].includes(tab) ? "active" : ""}
+          onClick={() => setMobileMoreOpen((v) => !v)}
+        >
+          <Menu size={20} />
+          <span>Mais</span>
+        </button>
+      </nav>
+      {mobileMoreOpen && (
+        <div className="mobile-more-backdrop" onClick={() => setMobileMoreOpen(false)}>
+          <div className="mobile-more-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-more-handle" />
+            <div className="mobile-more-head">
+              <strong>Menu da operação</strong>
+              <button type="button" className="icon-button" aria-label="Fechar menu" onClick={() => setMobileMoreOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mobile-more-list">
+              {nav
+                .filter((n) => !["dashboard", "vehicles", "tires", "alerts"].includes(n.id))
+                .filter((n) => (n.id === "users" || n.id === "drivers" ? manage : n.id === "reports" ? manage || user?.role === "tire_tech" : true))
+                .map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    className={tab === n.id ? "active" : ""}
+                    onClick={() => {
+                      setTab(n.id);
+                      setSearch("");
+                      setMobileMoreOpen(false);
+                    }}
+                  >
+                    <n.icon size={18} />
+                    <span>{n.name}</span>
+                  </button>
+                ))}
+              {platformAdmin && (
+                <Link href="/admin" onClick={() => setMobileMoreOpen(false)}>
+                  <ArrowUpRight size={18} />
+                  <span>Administração da plataforma</span>
+                </Link>
+              )}
+              <button type="button" className="danger" onClick={logout}>
+                <LogOut size={18} />
+                <span>Sair da conta</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
