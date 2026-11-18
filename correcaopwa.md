@@ -1,0 +1,1 @@
+poderia deixar responsivo para celular pois na hora fica fora de padrao nos celulares o pwa nao esta 100 navegavel tem alem do que a eltra fica pequena pode deixar com cara de app alem do cversao web elmhor e aproveitar dar uma chacade para ver se ja pode comercializar em em campo 

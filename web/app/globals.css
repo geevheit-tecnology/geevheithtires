@@ -3043,7 +3043,7 @@ td small {
 .panel[data-theme="dark"] .user-avatar { background: #41594a; color: #fff; }
 .panel[data-theme="dark"] .mobile-bottom-nav button.active { background: #41594a; color: #fff; }
 @media (max-width: 800px) {
-  .panel-body { min-width: 0; }
+  .panel-body { min-width: 0; width: 100%; margin-left: 0; }
   .panel-header > span { font-size: 13px; min-width: 0; }
   .panel-title p { font-size: 15px; line-height: 1.5; }
   .panel :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { font-size: 16px; max-width: 100%; }
