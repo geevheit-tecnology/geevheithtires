@@ -896,23 +896,30 @@ label small {
   margin: 14px 0;
 }
 .auth-box > p {
-  font-size: 12px;
-  margin-bottom: 28px;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+.auth-box :is(input:not([type="checkbox"]):not([type="radio"]), select) {
+  min-height: 46px;
+  font-size: 16px;
 }
 .auth-box .button {
   width: 100%;
-  margin-top: 5px;
+  min-height: 48px;
+  font-size: 15px;
+  margin-top: 8px;
 }
 .auth-link {
   display: block;
   text-align: center;
-  font-size: 11px;
+  font-size: 14px;
   margin-top: 20px;
 }
 .auth-switch {
   text-align: center;
-  margin-top: 30px;
-  font-size: 11px;
+  margin-top: 28px;
+  font-size: 14px;
 }
 .auth-switch a {
   font-weight: 700;
@@ -1644,13 +1651,13 @@ td small {
     padding: 30px;
   }
   .plan .button {
-    font-size: 13px;
+    font-size: 15px;
   }
   .plan li {
-    font-size: 12px;
+    font-size: 14px;
   }
   .plan > p {
-    font-size: 12px;
+    font-size: 14px;
   }
   .faq {
     grid-template-columns: 1fr;
@@ -1670,138 +1677,27 @@ td small {
     grid-template-columns: 1fr;
   }
   .auth-layout aside {
-    padding: 25px;
+    padding: 24px 20px;
   }
   .auth-layout aside > div,
   .auth-layout aside > span {
     display: none;
   }
   .auth-main {
-    padding: 25px;
+    padding: 24px 20px 36px;
   }
   .auth-box {
     margin: 0 auto;
-  }
-  .sidebar {
-    width: 72px;
-    padding: 22px 12px;
-  }
-  .sidebar .brand > span:last-child,
-  .company-badge,
-  .sidebar-bottom p,
-  .trial-label {
-    display: none;
-  }
-  .sidebar .brand-icon {
-    width: 40px;
-  }
-  .sidebar nav {
-    margin-top: 40px;
-    gap: 10px;
-  }
-  .sidebar nav button {
-    font-size: 0;
-    padding: 12px;
-    gap: 0;
-    justify-content: center;
-  }
-  .sidebar nav button svg {
-    width: 20px;
-    min-width: 20px;
-  }
-  .sidebar nav .count {
-    font-size: 8px;
-    position: absolute;
-    margin: 0 0 25px 28px;
-  }
-  .sidebar-bottom button {
-    font-size: 0;
-    justify-content: center;
-    width: 100%;
-  }
-  .panel-body {
-    margin-left: 72px;
-    width: calc(100% - 72px);
-  }
-  .panel-header {
-    height: 62px;
-    padding-inline: 20px;
-  }
-  .panel-content {
-    padding: 23px 18px;
-  }
-  .panel-title h1 {
-    font-size: 27px;
-  }
-  .panel-title .label {
-    font-size: 8px;
-  }
-  .panel-title p {
-    font-size: 10px;
-  }
-  .stats {
-    grid-template-columns: 1fr 1fr;
-  }
-  .stat > span {
-    font-size: 9px;
-  }
-  .stat small {
-    font-size: 8px;
+    padding-block: 16px 24px;
   }
   .steps {
     grid-template-columns: 1fr;
   }
-  .steps b {
-    font-size: 11px;
-  }
-  .onboarding {
-    padding: 20px;
-  }
-  .onboarding h2 {
-    font-size: 22px;
-  }
   .panel-columns {
     grid-template-columns: 1fr;
   }
-  .list-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .list-toolbar input {
-    max-width: none;
-  }
-  .vehicle-row {
-    padding: 14px;
-    gap: 10px;
-  }
-  .vehicle-row > span:nth-last-child(2) {
-    font-size: 8px;
-  }
-  .vehicle-row b {
-    font-size: 11px;
-  }
-  .vehicle-row small {
-    font-size: 9px;
-  }
-  .surface-title {
-    padding: 17px;
-  }
-  .fleet-grid .tire {
-    min-width: 44px;
-    padding-inline: 3px;
-  }
-  .fleet-grid .tire b {
-    font-size: 8px;
-  }
-  .fleet-grid .vehicle-map {
-    padding: 22px 12px;
-  }
-  .panel-header > span {
-    font-size: 9px;
-  }
   .plan-status {
-    padding: 22px;
+    padding: 20px;
   }
   .plan-status h2 {
     font-size: 24px;
@@ -1812,87 +1708,56 @@ td small {
 }
 @media (max-width: 420px) {
   .container {
-    width: calc(100% - 36px);
+    width: calc(100% - 32px);
   }
   .hero h1 {
-    font-size: 48px;
+    font-size: clamp(36px, 10.5vw, 48px);
   }
   .hero .eyebrow {
-    font-size: 8px;
+    font-size: 11px;
   }
   .hero-buttons {
     align-items: flex-start;
     flex-direction: column;
-    gap: 18px;
+    gap: 14px;
   }
   .hero .button {
     width: 100%;
-    gap: 18px;
+    gap: 14px;
   }
   .preview-content {
-    padding: 20px 14px;
+    padding: 18px 12px;
   }
   .preview-toolbar {
-    padding: 15px;
+    padding: 14px;
   }
   .tire {
-    min-width: 49px;
+    min-width: 44px;
   }
   .hero-strip {
-    font-size: 10px;
+    font-size: 12px;
     gap: 12px 15px;
   }
   h2 {
-    font-size: 34px;
+    font-size: 30px;
   }
   .calculator {
-    padding: 25px;
+    padding: 22px 18px;
+  }
+  .cta {
+    padding: 28px 20px;
   }
   .cta h2 {
-    font-size: 34px;
+    font-size: 30px;
   }
   .nav-actions {
-    font-size: 11px;
-  }
-  .panel-title p {
-    max-width: 190px;
-  }
-  .stat {
-    padding: 12px;
-  }
-  .stat > span svg {
-    display: none;
-  }
-  .stat strong {
-    font-size: 29px;
-  }
-  .stat small {
-    font-size: 7px;
-  }
-  .vehicle-row > span:nth-last-child(2):not(.pill) {
-    display: none;
-  }
-  .fleet-grid .tire {
-    min-width: 38px;
-  }
-  .fleet-grid .wheel-pair {
-    gap: 3px;
-  }
-  .fleet-grid .tire span {
-    font-size: 6px;
-  }
-  .fleet-grid .tire small {
-    font-size: 7px;
-  }
-  .fleet-grid .legend {
-    gap: 8px;
-    font-size: 7px;
+    font-size: 14px;
   }
   .form-grid {
     grid-template-columns: 1fr;
   }
   .modal form {
-    padding: 20px;
+    padding: 18px 16px;
   }
 }
 /* Landing motion: finite entrance cues and purposeful interaction feedback. */
@@ -2857,52 +2722,351 @@ td small {
 .mobile-bottom-nav { display: none; }
 .mobile-more-backdrop { display: none; }
 
+/* Panel appearance and touch accessibility */
+.panel-header-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.panel[data-theme="dark"] {
+  --navy: #e0eee4; --ink: #e4eee8; --muted: #b6c8bd;
+  --line: #42554a; --paper: #17221d; --green: #9bcdb0;
+  --amber: #edc37c; --red: #ffaaa5;
+  color: var(--ink); color-scheme: dark;
+}
+.panel[data-theme="dark"] :is(.panel-header, .surface, .stat, .modal, .icon-button, .mobile-bottom-nav, .mobile-more-sheet, .registration-actions, .steps button, .dossier-toolbar, .tire-visual-card, .tire-dossier-dialog) {
+  background: #25352d;
+  color: var(--ink);
+  border-color: var(--line);
+}
+.panel[data-theme="dark"] :is(.onboarding, .plan-upgrade, .removal-report) {
+  background: #203028;
+  color: var(--ink);
+  border-color: var(--line);
+}
+.panel[data-theme="dark"] .stat.critical {
+  background: #3a2324;
+  border-color: #6b3b3d;
+}
+.panel[data-theme="dark"] :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  background: #1c2b23;
+  color: var(--ink);
+  border-color: #657b6c;
+}
+.panel[data-theme="dark"] :is(.vehicle-driver, .lifecycle-form, .lifecycle-facts p, .plan-context, .inventory-summary button, .mobile-more-list button, .mobile-more-list a, .vehicle-icon, th) {
+  background: #304239;
+  color: var(--ink);
+  border-color: var(--line);
+}
+.panel[data-theme="dark"] .pill { background: #304239; color: #d5e5dc; }
+.panel[data-theme="dark"] .pill.ok { background: #1f3c2f; color: #9bcdb0; }
+.panel[data-theme="dark"] .pill.alerta { background: #3f341f; color: #edc37c; }
+.panel[data-theme="dark"] .pill.critico { background: #462527; color: #ffaaa5; }
+.panel[data-theme="dark"] .tread-bar { background: #394b42; }
+.panel[data-theme="dark"] .mobile-more-handle { background: #5a7064; }
+.panel[data-theme="dark"] :is(.inventory-summary strong, .tire-visual-foot b, .tire-visual-top strong) { color: var(--ink); }
+.panel[data-theme="dark"] .sidebar { color: #fff; }
+.panel[data-theme="dark"] .user-avatar { background: #41594a; color: #fff; }
+.panel[data-theme="dark"] .mobile-bottom-nav button.active { background: #41594a; color: #fff; }
+.panel[data-theme="dark"] .mobile-more-list button.active { background: #41594a; color: #fff; }
+
 @media (max-width: 800px) {
   html, body {
-    overflow-x: hidden;
-    background: var(--paper);
+    overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
   }
   .panel {
-    grid-template-columns: 1fr;
-    padding-bottom: calc(74px + env(safe-area-inset-bottom));
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    background: var(--paper);
   }
-  .sidebar {
+  .panel .sidebar {
     display: none;
   }
-  .panel-header {
+  .panel .panel-body {
+    margin-left: 0;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .panel .panel-header {
     position: sticky;
     top: 0;
     z-index: 25;
-    padding: 12px 16px;
-    padding-top: calc(12px + env(safe-area-inset-top));
-    background: rgba(255, 255, 255, 0.92);
+    height: auto;
+    min-height: 58px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.94);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--line);
   }
-  .panel-content {
-    padding: 16px 14px 24px;
+  .panel[data-theme="dark"] .panel-header {
+    background: rgba(37, 53, 45, 0.94);
   }
-  .panel-title h1 { font-size: 24px; }
-  .stats {
+  .panel .panel-header > span {
+    font-size: 14px;
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .panel .panel-content {
+    width: 100%;
+    max-width: 100%;
+    padding: 18px 16px 28px;
+  }
+  .panel .panel-title {
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .panel .panel-title .label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+  .panel .panel-title h1 {
+    font-size: 26px;
+    line-height: 1.2;
+    margin: 6px 0;
+  }
+  .panel .panel-title p {
+    max-width: none;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .panel .plan-context {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    margin-bottom: 18px;
+    font-size: 14px;
+  }
+  .panel .plan-context .table-link {
+    margin-left: 0;
+    padding: 4px 0;
+  }
+  .panel .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
-  .stat { padding: 14px; border-radius: 16px; }
-  .stat strong { font-size: 26px; }
-  .registration-actions,
-  .onboarding,
-  .surface {
-    border-radius: 18px;
+  .panel .stat {
+    padding: 14px;
+    border-radius: 16px;
+    gap: 6px;
+  }
+  .panel .stat > span {
+    font-size: 13px;
+    line-height: 1.35;
+    min-height: 0;
+    font-weight: 600;
+  }
+  .panel .stat > span svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+  }
+  .panel .stat strong {
+    font-size: 28px;
+    line-height: 1.2;
+    margin: 4px 0;
+  }
+  .panel .stat small {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .panel .registration-actions,
+  .panel .onboarding {
+    border-radius: 16px;
+    padding: 18px 16px;
+    margin-bottom: 18px;
+  }
+  .panel .registration-actions h2,
+  .panel .onboarding h2 {
+    font-size: 22px;
+  }
+  .panel .registration-buttons {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .panel .registration-buttons .button {
+    width: 100%;
+    justify-content: flex-start;
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 15px;
+  }
+  .panel .registration-buttons .button > svg:last-child {
+    margin-left: auto;
+  }
+  .panel .steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .panel .steps button {
+    min-height: 52px;
+    padding: 12px 14px;
+    border-radius: 12px;
+  }
+  .panel .steps b {
+    font-size: 15px;
+  }
+  .panel .surface {
+    border-radius: 16px;
+  }
+  .panel .surface-title {
+    padding: 16px;
+    gap: 10px;
+  }
+  .panel .surface-title h3 {
+    font-size: 18px;
+  }
+  .panel .surface-title button,
+  .panel .surface-title small {
+    font-size: 14px;
+  }
+  .panel .vehicle-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 12px;
+    padding: 14px 16px;
+  }
+  .panel .vehicle-row b {
+    font-size: 16px;
+    display: block;
+  }
+  .panel .vehicle-row small {
+    font-size: 14px;
+  }
+  .panel .vehicle-row > span:nth-last-child(2) {
+    grid-column: 2;
+    margin-left: 0;
+    font-size: 13px;
+    display: block;
+  }
+  .panel .vehicle-row > svg:last-child {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+  .panel .alert-row {
+    flex-wrap: wrap;
+    padding: 16px;
+    gap: 10px;
+  }
+  .panel .alert-row > div {
+    flex: 1;
+    min-width: 0;
+  }
+  .panel .alert-row p {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .panel .alert-row b {
+    font-size: 13px;
+  }
+  .panel .alert-row small {
+    font-size: 12px;
+  }
+  .panel .alert-row > button {
+    margin-left: 18px;
+    min-height: 40px;
+    padding: 6px 0;
+  }
+  .panel .list-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .panel .list-toolbar input,
+  .panel .list-toolbar .button {
+    width: 100%;
+    max-width: 100%;
+    justify-content: center;
+    min-height: 48px;
+  }
+  .panel .inventory-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .panel .inventory-summary button {
+    padding: 14px;
+    font-size: 14px;
+  }
+  .panel .inventory-summary strong {
+    font-size: 24px;
+  }
+  .panel .fleet-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .panel .fleet-grid .odometer-form {
+    padding: 16px;
+    margin-bottom: 0;
+  }
+  .panel .fleet-grid .odometer-form input {
+    width: 100%;
+  }
+  .panel .fleet-grid .vehicle-driver {
+    margin: 16px;
     padding: 16px;
   }
-  .registration-buttons {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
+  .panel .fleet-grid .vehicle-map {
+    max-width: 100%;
+    padding: 16px 10px;
+    overflow-x: auto;
   }
-  .registration-buttons .button { width: 100%; justify-content: center; min-height: 44px; }
+  .panel .fleet-grid .axle {
+    gap: 6px;
+  }
+  .panel .fleet-grid .wheel-pair {
+    gap: 4px;
+    flex: 1;
+    justify-content: center;
+  }
+  .panel .fleet-grid .tire {
+    min-width: 0;
+    flex: 1;
+    max-width: 82px;
+    padding: 8px 4px;
+  }
+  .panel .fleet-grid .tire span {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+  .panel .fleet-grid .tire b {
+    font-size: 12px;
+  }
+  .panel .fleet-grid .tire small {
+    font-size: 11px;
+  }
+  .panel .fleet-grid .legend {
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    font-size: 12px;
+  }
+  .panel :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    font-size: 16px;
+    max-width: 100%;
+  }
+  .panel .commercial-scroll,
+  .panel .table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .tire-table-desktop { display: none; }
-  .tire-cards-mobile { display: grid; }
+  .tire-cards-mobile { display: grid; gap: 12px; }
+  .tire-visual-card { padding: 14px; gap: 12px; }
+  .tire-visual-meta small { font-size: 13px; }
+  .tire-visual-foot { font-size: 13px; flex-wrap: wrap; }
   .tire-360-viewport { height: 245px; }
   .tire-360-telemetry-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tire-dossier-dialog {
@@ -2912,8 +3076,13 @@ td small {
     max-height: 100dvh;
     margin: 0;
     border-radius: 0;
-    padding: 14px;
-    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    padding: 16px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    padding-bottom: calc(28px + env(safe-area-inset-bottom));
+  }
+  .dossier-toolbar {
+    top: calc(-12px - env(safe-area-inset-top));
+    padding: 14px 0;
   }
   .modal-backdrop {
     align-items: flex-end;
@@ -2924,33 +3093,56 @@ td small {
     max-width: 100%;
     max-height: 92dvh;
     border-radius: 22px 22px 0 0;
-    padding: 18px 16px calc(22px + env(safe-area-inset-bottom));
+    padding: 0 0 calc(20px + env(safe-area-inset-bottom));
+  }
+  .modal form {
+    padding: 18px 16px 24px;
   }
   .mobile-bottom-nav {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
+    width: 100%;
     z-index: 40;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    align-items: center;
+    align-items: stretch;
+    gap: 4px;
     background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(14px);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border-top: 1px solid var(--line);
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
-    box-shadow: 0 -8px 24px rgba(17, 28, 25, 0.08);
+    padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 24px rgba(17, 28, 25, 0.08);
+  }
+  .panel[data-theme="dark"] .mobile-bottom-nav {
+    background: rgba(37, 53, 45, 0.96);
   }
   .mobile-bottom-nav button {
     position: relative;
-    display: grid;
-    justify-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 3px;
-    padding: 6px 4px;
+    min-width: 0;
+    width: 100%;
+    min-height: 52px;
+    padding: 6px 2px;
     font-size: 11px;
+    line-height: 1.15;
     font-weight: 600;
     color: var(--muted);
     border-radius: 12px;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .mobile-bottom-nav button span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .mobile-bottom-nav button.active {
     color: var(--navy);
@@ -2959,16 +3151,18 @@ td small {
   }
   .mobile-nav-badge {
     position: absolute;
-    top: 2px;
-    right: 16%;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
+    top: 3px;
+    right: calc(50% - 20px);
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
     border-radius: 999px;
     background: var(--red);
     color: #fff;
     font-style: normal;
     font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
     display: grid;
     place-items: center;
   }
@@ -2982,9 +3176,12 @@ td small {
   }
   .mobile-more-sheet {
     width: 100%;
+    max-height: 85dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: #fff;
     border-radius: 22px 22px 0 0;
-    padding: 10px 16px calc(22px + env(safe-area-inset-bottom));
+    padding: 12px 16px calc(24px + env(safe-area-inset-bottom));
     box-shadow: 0 -14px 36px rgba(0, 0, 0, 0.18);
   }
   .mobile-more-handle {
@@ -2992,17 +3189,18 @@ td small {
     height: 4px;
     border-radius: 999px;
     background: #cfd8d3;
-    margin: 0 auto 12px;
+    margin: 0 auto 14px;
   }
   .mobile-more-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+    font-size: 16px;
   }
   .mobile-more-list {
     display: grid;
-    gap: 6px;
+    gap: 8px;
   }
   .mobile-more-list button,
   .mobile-more-list a {
@@ -3010,9 +3208,11 @@ td small {
     align-items: center;
     gap: 12px;
     width: 100%;
+    min-height: 50px;
     padding: 12px 14px;
     border-radius: 12px;
-    font-size: 14px;
+    font-size: 16px;
+    line-height: 1.3;
     font-weight: 600;
     color: var(--ink);
     background: var(--paper);
@@ -3023,32 +3223,12 @@ td small {
   }
   .mobile-more-list button.danger {
     color: var(--red);
-    background: rgba(182, 86, 84, 0.08);
+    background: rgba(182, 86, 84, 0.1);
   }
 }
-
-/* Panel appearance and touch accessibility */
-.panel-header-actions { display: flex; align-items: center; gap: 12px; }
-.panel[data-theme="dark"] {
-  --navy: #e0eee4; --ink: #e4eee8; --muted: #b6c8bd;
-  --line: #42554a; --paper: #17221d; --green: #9bcdb0;
-  --amber: #edc37c; --red: #ffaaa5;
-  color: var(--ink); color-scheme: dark;
-}
-.panel[data-theme="dark"] :is(.panel-header, .surface, .stat, .modal, .icon-button, .mobile-bottom-nav, .mobile-more-sheet, .registration-actions, .steps button, .dossier-toolbar) { background: #25352d; color: var(--ink); border-color: var(--line); }
-.panel[data-theme="dark"] :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { background: #1c2b23; color: var(--ink); border-color: #657b6c; }
-.panel[data-theme="dark"] :is(.vehicle-driver, .lifecycle-form, .lifecycle-facts p, .plan-context, .inventory-summary button, .mobile-more-list button, .mobile-more-list a) { background: #304239; color: var(--ink); border-color: var(--line); }
-.panel[data-theme="dark"] :is(.inventory-summary strong, .tire-visual-foot b) { color: var(--ink); }
-.panel[data-theme="dark"] .sidebar { color: #fff; }
-.panel[data-theme="dark"] .user-avatar { background: #41594a; color: #fff; }
-.panel[data-theme="dark"] .mobile-bottom-nav button.active { background: #41594a; color: #fff; }
-@media (max-width: 800px) {
-  .panel-body { min-width: 0; width: 100%; margin-left: 0; }
-  .panel-header > span { font-size: 13px; min-width: 0; }
-  .panel-title p { font-size: 15px; line-height: 1.5; }
-  .panel :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { font-size: 16px; max-width: 100%; }
-  .mobile-bottom-nav button { min-height: 48px; font-size: 12px; }
-  .mobile-more-sheet { max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain; }
-  .mobile-more-list button, .mobile-more-list a { min-height: 48px; font-size: 16px; }
-  .panel .commercial-scroll, .panel .table-wrap { max-width: 100%; overflow-x: auto; }
+@media (max-width: 350px) {
+  .panel .stats,
+  .panel .inventory-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
