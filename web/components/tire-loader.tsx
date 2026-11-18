@@ -58,8 +58,8 @@ export function TireLoader({
           {[0, 60, 120, 180, 240, 300].map((deg) => (
             <circle
               key={deg}
-              cx={60 + 16.5 * Math.cos((deg * Math.PI) / 180)}
-              cy={60 + 16.5 * Math.sin((deg * Math.PI) / 180)}
+              cx={(60 + 16.5 * Math.cos((deg * Math.PI) / 180)).toFixed(4)}
+              cy={(60 + 16.5 * Math.sin((deg * Math.PI) / 180)).toFixed(4)}
               r="2.4"
               fill="#1b2b27"
             />

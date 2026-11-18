@@ -16,6 +16,8 @@ import {
   RefreshCw,
   Camera,
   Menu,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { TireLoader } from "./tire-loader";
 import { optimizeTirePhoto, OptimizedTirePhoto } from "../lib/image-optimize";
@@ -44,7 +46,9 @@ type Vehicle = {
   driver_id?: string|null;
   driver_name?: string|null;
 };
-type User = { id: string; name: string; email: string; role: string };
+type User = { id: string; company_id: string; name: string; email: string; role: string };
+type PendingInspection = { userId: string; companyId: string; tireId: string; tireCode: string; data: Record<string, unknown> };
+const pendingKey = "geevheittire-pending-inspections-v1";
 type Alert = {
   id: string;
   message: string;
@@ -107,6 +111,51 @@ export default function Panel() {
   const [search, setSearch] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [pending, setPending] = useState<PendingInspection[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const syncingRef = useRef(false);
+  useEffect(() => {
+    try { const saved = JSON.parse(localStorage.getItem(pendingKey) || "[]"); if (Array.isArray(saved)) setPending(saved); } catch {}
+  }, []);
+  function savePending(items: PendingInspection[]) {
+    localStorage.setItem(pendingKey, JSON.stringify(items));
+    setPending(items);
+  }
+  async function syncPending() {
+    if (!user || syncingRef.current) return;
+    syncingRef.current = true;
+    setSyncing(true);
+    try {
+      // Confirm the current server identity before sending anything from this device.
+      const current = await api("me");
+      if (current.id !== user.id || current.company_id !== user.company_id) throw new Error("A conta atual mudou. Entre com a conta que registrou as inspeções.");
+      let items: PendingInspection[] = JSON.parse(localStorage.getItem(pendingKey) || "[]");
+      for (const item of items.filter(x => x.userId === current.id && x.companyId === current.company_id)) {
+        await api(`tires/${item.tireId}/inspections`, item.data);
+        // Re-read before removing so a newly queued inspection is not overwritten.
+        items = (JSON.parse(localStorage.getItem(pendingKey) || "[]") as PendingInspection[])
+          .filter(x => x.data.client_id !== item.data.client_id);
+        savePending(items);
+      }
+      setNotice("Inspeções pendentes enviadas. Atualize os dados para consultar as recomendações.");
+    } catch (e) { setError(`Sincronização pendente: ${(e as Error).message}`); }
+    finally { syncingRef.current = false; setSyncing(false); }
+  }
+  useEffect(() => {
+    if (!user || !pending.some(x => x.userId === user.id && x.companyId === user.company_id)) return;
+    const online = () => { void syncPending(); };
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+  });
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  useEffect(() => {
+    try { if (localStorage.getItem("geevheittire-theme") === "dark") setTheme("dark"); } catch {}
+  }, []);
+  function toggleTheme() {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    try { localStorage.setItem("geevheittire-theme", next); } catch {}
+  }
   const [newTirePhoto, setNewTirePhoto] = useState<OptimizedTirePhoto | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const manage = user?.role === "owner" || user?.role === "manager";
@@ -244,10 +293,13 @@ export default function Panel() {
       data.pressure_psi = Number(data.pressure_psi);
       data.structural_damage = data.structural_damage === "on";
       data.client_id = inspectionClient;
+      data.inspected_at = new Date().toISOString();
       if(data.vehicle_km!==undefined && data.vehicle_km!=="") data.vehicle_km=Number(data.vehicle_km); else delete data.vehicle_km;
     }
+    let inspectionAccepted = false;
     try {
       const out = await api(endpoint, data);
+      inspectionAccepted = modal === "inspection";
       setNotice(
         modal === "inspection"
           ? out.classification.recommendation
@@ -259,6 +311,15 @@ export default function Panel() {
       await load();
       if (map) setMap(await api(`vehicles/${map.vehicle.id}/tire-map`));
     } catch (e) {
+      if (modal === "inspection" && !inspectionAccepted && e instanceof TypeError && user && selected) {
+        try {
+          const items: PendingInspection[] = JSON.parse(localStorage.getItem(pendingKey) || "[]");
+          savePending([...items, { userId: user.id, companyId: user.company_id, tireId: selected.id, tireCode: selected.code, data }]);
+          setModal("");
+          setNotice("Inspeção salva somente neste aparelho. Envie quando a conexão voltar; a classificação ainda não foi calculada.");
+          return;
+        } catch { setError("Não foi possível guardar a inspeção neste aparelho. Mantenha o formulário aberto e tente novamente."); return; }
+      }
       setError((e as Error).message);
     } finally {
       setBusy(false);
@@ -279,7 +340,7 @@ export default function Panel() {
   }
   return (
     <PlanAccessProvider access={access} viewPlans={()=>setTab("plan")} refresh={refreshPlan}>
-    <div className="panel">
+    <div className="panel" data-theme={theme}>
       <aside className="sidebar">
         <Brand />
         <div className="company-badge">
@@ -333,7 +394,12 @@ export default function Panel() {
             <i className="dot ok" />
             GeevheitTire / {nav.find((n) => n.id === tab)?.name}
           </span>
-          <div className="user-avatar">{user?.name?.slice(0, 1) || "G"}</div>
+          <div className="panel-header-actions">
+            <button type="button" className="icon-button theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"} title={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}>
+              {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
+            </button>
+            <div className="user-avatar">{user?.name?.slice(0, 1) || "G"}</div>
+          </div>
         </header>
         <main className="panel-content">
           <div className="panel-title">
@@ -371,6 +437,7 @@ export default function Panel() {
               </button>
             </div>
           )}
+          {user && pending.some(x => x.userId === user.id && x.companyId === user.company_id) && <div className="info" role="status">{pending.filter(x => x.userId === user.id && x.companyId === user.company_id).length} inspeção(ões) aguardando envio neste aparelho. <button type="button" className="table-link" disabled={syncing} onClick={() => void syncPending()}>{syncing ? "Enviando…" : "Enviar agora"}</button></div>}
           {loaded&&<div className="plan-context"><span className="plan-level">{access.plan_name}</span><span>{access.status==="trial"?"Avaliação com recursos Starter":access.can_write?"Recursos do seu plano":"Acesso para consulta"} · até {access.vehicle_limit} veículos e {access.user_limit} usuários</span><button className="table-link" onClick={()=>setTab("plan")}>Ver benefícios</button></div>}
           {!loaded && !error && <TireLoader />}
           {tab === "dashboard" && (
@@ -1051,6 +1118,7 @@ export default function Panel() {
             key={item.id}
             type="button"
             className={tab === item.id ? "active" : ""}
+            aria-current={tab === item.id ? "page" : undefined}
             onClick={() => {
               setTab(item.id);
               setSearch("");
@@ -1065,6 +1133,8 @@ export default function Panel() {
         <button
           type="button"
           className={mobileMoreOpen || !["dashboard", "vehicles", "tires", "alerts"].includes(tab) ? "active" : ""}
+          aria-expanded={mobileMoreOpen}
+          aria-controls="mobile-more-menu"
           onClick={() => setMobileMoreOpen((v) => !v)}
         >
           <Menu size={20} />
@@ -1073,7 +1143,7 @@ export default function Panel() {
       </nav>
       {mobileMoreOpen && (
         <div className="mobile-more-backdrop" onClick={() => setMobileMoreOpen(false)}>
-          <div className="mobile-more-sheet" onClick={(e) => e.stopPropagation()}>
+          <div className="mobile-more-sheet" id="mobile-more-menu" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-more-handle" />
             <div className="mobile-more-head">
               <strong>Menu da operação</strong>

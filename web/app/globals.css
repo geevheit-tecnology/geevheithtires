@@ -3026,3 +3026,29 @@ td small {
     background: rgba(182, 86, 84, 0.08);
   }
 }
+
+/* Panel appearance and touch accessibility */
+.panel-header-actions { display: flex; align-items: center; gap: 12px; }
+.panel[data-theme="dark"] {
+  --navy: #e0eee4; --ink: #e4eee8; --muted: #b6c8bd;
+  --line: #42554a; --paper: #17221d; --green: #9bcdb0;
+  --amber: #edc37c; --red: #ffaaa5;
+  color: var(--ink); color-scheme: dark;
+}
+.panel[data-theme="dark"] :is(.panel-header, .surface, .stat, .modal, .icon-button, .mobile-bottom-nav, .mobile-more-sheet, .registration-actions, .steps button, .dossier-toolbar) { background: #25352d; color: var(--ink); border-color: var(--line); }
+.panel[data-theme="dark"] :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { background: #1c2b23; color: var(--ink); border-color: #657b6c; }
+.panel[data-theme="dark"] :is(.vehicle-driver, .lifecycle-form, .lifecycle-facts p, .plan-context, .inventory-summary button, .mobile-more-list button, .mobile-more-list a) { background: #304239; color: var(--ink); border-color: var(--line); }
+.panel[data-theme="dark"] :is(.inventory-summary strong, .tire-visual-foot b) { color: var(--ink); }
+.panel[data-theme="dark"] .sidebar { color: #fff; }
+.panel[data-theme="dark"] .user-avatar { background: #41594a; color: #fff; }
+.panel[data-theme="dark"] .mobile-bottom-nav button.active { background: #41594a; color: #fff; }
+@media (max-width: 800px) {
+  .panel-body { min-width: 0; }
+  .panel-header > span { font-size: 13px; min-width: 0; }
+  .panel-title p { font-size: 15px; line-height: 1.5; }
+  .panel :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { font-size: 16px; max-width: 100%; }
+  .mobile-bottom-nav button { min-height: 48px; font-size: 12px; }
+  .mobile-more-sheet { max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain; }
+  .mobile-more-list button, .mobile-more-list a { min-height: 48px; font-size: 16px; }
+  .panel .commercial-scroll, .panel .table-wrap { max-width: 100%; overflow-x: auto; }
+}
