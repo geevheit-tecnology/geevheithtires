@@ -873,12 +873,12 @@ func (a *App) readAlert(w http.ResponseWriter, r *http.Request) {
 }
 var (
 	serverlessOnce    sync.Once
+	serverlessApp     *App
 	serverlessHandler http.Handler
 	serverlessErr     error
 )
 
-// NewServerlessHandler initializes a singleton HTTP handler for Vercel Serverless Functions.
-func NewServerlessHandler() (http.Handler, error) {
+func initServerless() (*App, http.Handler, error) {
 	serverlessOnce.Do(func() {
 		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 		secret := os.Getenv("JWT_SECRET")
@@ -901,9 +901,16 @@ func NewServerlessHandler() (http.Handler, error) {
 			mailKey:   os.Getenv("RESEND_API_KEY"),
 			directory: newPublicDirectory(),
 		}
+		serverlessApp = a
 		serverlessHandler = NewRouter(a)
 	})
-	return serverlessHandler, serverlessErr
+	return serverlessApp, serverlessHandler, serverlessErr
+}
+
+// NewServerlessHandler initializes a singleton HTTP handler for Vercel Serverless Functions.
+func NewServerlessHandler() (http.Handler, error) {
+	_, h, err := initServerless()
+	return h, err
 }
 
 // Run starts the standalone HTTP server for local development or Docker.
@@ -963,6 +970,7 @@ func NewRouter(a *App) http.Handler {
 		write(w, 200, map[string]string{"status": "ok", "service": "geevheittire", "tire_lifecycle_revision": "3", "admin_revision": "2", "release": "2026-10-29-admin-control"})
 	})
 	r.Post("/api/v1/webhooks/asaas", a.asaasWebhook)
+	r.Post("/api/v1/internal/maintenance", a.scheduledMaintenance)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/plans", a.publicPlans)
 		r.Group(func(r chi.Router) {

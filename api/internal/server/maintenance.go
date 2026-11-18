@@ -2,9 +2,13 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"log/slog"
+	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -159,11 +163,22 @@ func (a *App) refreshMaintenance(ctx context.Context, t pgx.Tx, company string) 
 	_, e = t.Exec(ctx, "update alerts set resolved_at=now(),read=true,updated_at=now() where company_id=$1 and resolved_at is null and rule_key is not null and not(rule_key=any($2::text[]))", company, active)
 	return e
 }
-func (a *App) maintenanceSweep(ctx context.Context) {
+type MaintenanceSweepResult struct {
+	Companies  int   `json:"companies"`
+	Processed  int   `json:"processed"`
+	Failed     int   `json:"failed"`
+	TimedOut   bool  `json:"timed_out"`
+	DurationMs int64 `json:"duration_ms"`
+}
+
+func (a *App) runMaintenanceSweep(ctx context.Context) (MaintenanceSweepResult, error) {
+	started := time.Now()
+	var res MaintenanceSweepResult
 	rows, e := a.db.Query(ctx, "select id from maintenance_companies()")
 	if e != nil {
-		slog.Warn("maintenance tenant lookup failed")
-		return
+		slog.Warn("maintenance tenant lookup failed", "error", e)
+		res.DurationMs = time.Since(started).Milliseconds()
+		return res, e
 	}
 	companies := []string{}
 	for rows.Next() {
@@ -175,19 +190,27 @@ func (a *App) maintenanceSweep(ctx context.Context) {
 	}
 	rowErr := rows.Err()
 	rows.Close()
-	if e != nil || rowErr != nil {
-		return
+	if e != nil {
+		res.DurationMs = time.Since(started).Milliseconds()
+		return res, e
 	}
+	if rowErr != nil {
+		res.DurationMs = time.Since(started).Milliseconds()
+		return res, rowErr
+	}
+	res.Companies = len(companies)
 	for _, company := range companies {
 		if ctx.Err() != nil {
-			return
+			res.TimedOut = true
+			break
 		}
-		func() {
-			work, cancel := context.WithTimeout(ctx, 25*time.Second)
+		ok := func() bool {
+			work, cancel := context.WithTimeout(ctx, 20*time.Second)
 			defer cancel()
 			t, err := a.db.Begin(work)
 			if err != nil {
-				return
+				slog.Warn("maintenance transaction begin failed", "company_id", company, "error", err)
+				return false
 			}
 			defer t.Rollback(work)
 			_, err = t.Exec(work, "select set_config('app.company_id',$1,true)", company)
@@ -196,7 +219,7 @@ func (a *App) maintenanceSweep(ctx context.Context) {
 				err = t.QueryRow(work, "select exists(select 1 from companies where id=$1 and deleted_at is null)", company).Scan(&active)
 				if err == nil && !active {
 					// The tenant may have been closed after the sweep captured its list.
-					return
+					return true
 				}
 			}
 			if err == nil {
@@ -206,11 +229,71 @@ func (a *App) maintenanceSweep(ctx context.Context) {
 				err = t.Commit(work)
 			}
 			if err != nil {
-				slog.Warn("maintenance reconciliation failed", "company_id", company)
+				slog.Warn("maintenance reconciliation failed", "company_id", company, "error", err)
+				return false
 			}
+			return true
 		}()
+		if ok {
+			res.Processed++
+		} else {
+			res.Failed++
+		}
 	}
+	res.DurationMs = time.Since(started).Milliseconds()
+	return res, nil
 }
+func (a *App) maintenanceSweep(ctx context.Context) {
+	_, _ = a.runMaintenanceSweep(ctx)
+}
+
+var maintenanceRunner = func(a *App, ctx context.Context) (MaintenanceSweepResult, error) {
+	return a.runMaintenanceSweep(ctx)
+}
+
+// scheduledMaintenance runs one idempotent maintenance reconciliation pass when invoked
+// by Vercel Schedules with Authorization: Bearer <CRON_SECRET>.
+func (a *App) scheduledMaintenance(w http.ResponseWriter, r *http.Request) {
+	secret := strings.TrimSpace(os.Getenv("CRON_SECRET"))
+	if len(secret) < 16 {
+		problem(w, http.StatusServiceUnavailable, "Agendamento de manutenção não configurado.")
+		return
+	}
+	auth := r.Header.Get("Authorization")
+	expected := "Bearer " + secret
+	if len(auth) != len(expected) || subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
+		problem(w, http.StatusUnauthorized, "Não autorizado.")
+		return
+	}
+
+	res, err := maintenanceRunner(a, r.Context())
+	if err != nil {
+		slog.Error("scheduled maintenance sweep failed", "error", err, "duration_ms", res.DurationMs)
+		problem(w, http.StatusServiceUnavailable, "Falha na varredura agendada de manutenção.")
+		return
+	}
+	slog.Info(
+		"scheduled maintenance sweep completed",
+		"companies", res.Companies,
+		"processed", res.Processed,
+		"failed", res.Failed,
+		"timed_out", res.TimedOut,
+		"duration_ms", res.DurationMs,
+	)
+	status := http.StatusOK
+	if res.Companies > 0 && res.Processed == 0 {
+		status = http.StatusInternalServerError
+	}
+	write(w, status, map[string]any{
+		"status":      "ok",
+		"companies":   res.Companies,
+		"processed":   res.Processed,
+		"failed":      res.Failed,
+		"timed_out":   res.TimedOut,
+		"duration_ms": res.DurationMs,
+	})
+}
+
 func (a *App) maintenanceWorker(ctx context.Context) {
 	a.maintenanceSweep(ctx)
 	ticker := time.NewTicker(5 * time.Minute)
