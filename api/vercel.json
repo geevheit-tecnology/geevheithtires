@@ -7,9 +7,5 @@
       "path": "/api/v1/internal/maintenance",
       "requestMethod": "POST"
     }
-  },
-  "rewrites": [
-    { "source": "/health", "destination": "/api/index?__path=/health" },
-    { "source": "/api/v1/:path*", "destination": "/api/index?__path=/api/v1/:path*" }
-  ]
+  }
 }
