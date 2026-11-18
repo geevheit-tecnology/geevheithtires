@@ -110,7 +110,15 @@ export default function Panel() {
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileMenuOpen]);
   const [pending, setPending] = useState<PendingInspection[]>([]);
   const [syncing, setSyncing] = useState(false);
   const syncingRef = useRef(false);
@@ -341,8 +349,25 @@ export default function Panel() {
   return (
     <PlanAccessProvider access={access} viewPlans={()=>setTab("plan")} refresh={refreshPlan}>
     <div className="panel" data-theme={theme}>
-      <aside className="sidebar">
-        <Brand />
+      {mobileMenuOpen && (
+        <div
+          className="sidebar-backdrop"
+          aria-hidden="true"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+      <aside id="panel-sidebar" className={mobileMenuOpen ? "sidebar open" : "sidebar"}>
+        <div className="sidebar-top">
+          <Brand />
+          <button
+            type="button"
+            className="sidebar-close"
+            aria-label="Fechar menu"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <X size={20} />
+          </button>
+        </div>
         <div className="company-badge">
           <span>{dash?.company.name?.slice(0, 1) || "G"}</span>
           <div>
@@ -360,6 +385,7 @@ export default function Panel() {
                 onClick={() => {
                   setTab(n.id);
                   setSearch("");
+                  setMobileMenuOpen(false);
                 }}
               >
                 <n.icon size={19} />
@@ -369,7 +395,7 @@ export default function Panel() {
                 )}
               </button>
             ))}
-          {platformAdmin&&<Link className="admin-entry" href="/admin">Administração da plataforma →</Link>}
+          {platformAdmin&&<Link className="admin-entry" href="/admin" onClick={() => setMobileMenuOpen(false)}>Administração da plataforma →</Link>}
         </nav>
         <div className="sidebar-bottom">
           <span className="trial-label">
@@ -382,7 +408,7 @@ export default function Panel() {
             <br />
             Um caminho mais eficiente.
           </p>
-          <button onClick={logout}>
+          <button onClick={() => { setMobileMenuOpen(false); void logout(); }}>
             <LogOut size={17} />
             Sair da conta
           </button>
@@ -390,10 +416,23 @@ export default function Panel() {
       </aside>
       <div className="panel-body">
         <header className="panel-header">
-          <span>
-            <i className="dot ok" />
-            GeevheitTire / {nav.find((n) => n.id === tab)?.name}
-          </span>
+          <div className="panel-header-left">
+            <button
+              type="button"
+              className="icon-button mobile-menu-trigger"
+              aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="panel-sidebar"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+            >
+              <Menu size={20} />
+              {!!dash?.alerts && <i className="mobile-menu-dot" aria-hidden="true" />}
+            </button>
+            <span>
+              <i className="dot ok" />
+              GeevheitTire / {nav.find((n) => n.id === tab)?.name}
+            </span>
+          </div>
           <div className="panel-header-actions">
             <button type="button" className="icon-button theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"} title={theme === "light" ? "Ativar tema escuro" : "Ativar tema claro"}>
               {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
@@ -1105,83 +1144,6 @@ export default function Panel() {
               </button>
             </form>
           </section>
-        </div>
-      )}
-      <nav className="mobile-bottom-nav" aria-label="Navegação principal do aplicativo">
-        {[
-          { id: "dashboard", label: "Painel", icon: LayoutDashboard },
-          { id: "vehicles", label: "Veículos", icon: Truck },
-          { id: "tires", label: "Pneus", icon: CircleDot },
-          { id: "alerts", label: "Alertas", icon: Bell, badge: dash?.alerts || 0 },
-        ].map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={tab === item.id ? "active" : ""}
-            aria-current={tab === item.id ? "page" : undefined}
-            onClick={() => {
-              setTab(item.id);
-              setSearch("");
-              setMobileMoreOpen(false);
-            }}
-          >
-            <item.icon size={20} />
-            <span>{item.label}</span>
-            {!!item.badge && <i className="mobile-nav-badge">{item.badge}</i>}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={mobileMoreOpen || !["dashboard", "vehicles", "tires", "alerts"].includes(tab) ? "active" : ""}
-          aria-expanded={mobileMoreOpen}
-          aria-controls="mobile-more-menu"
-          onClick={() => setMobileMoreOpen((v) => !v)}
-        >
-          <Menu size={20} />
-          <span>Mais</span>
-        </button>
-      </nav>
-      {mobileMoreOpen && (
-        <div className="mobile-more-backdrop" onClick={() => setMobileMoreOpen(false)}>
-          <div className="mobile-more-sheet" id="mobile-more-menu" onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-more-handle" />
-            <div className="mobile-more-head">
-              <strong>Menu da operação</strong>
-              <button type="button" className="icon-button" aria-label="Fechar menu" onClick={() => setMobileMoreOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <div className="mobile-more-list">
-              {nav
-                .filter((n) => !["dashboard", "vehicles", "tires", "alerts"].includes(n.id))
-                .filter((n) => (n.id === "users" || n.id === "drivers" ? manage : n.id === "reports" ? manage || user?.role === "tire_tech" : true))
-                .map((n) => (
-                  <button
-                    key={n.id}
-                    type="button"
-                    className={tab === n.id ? "active" : ""}
-                    onClick={() => {
-                      setTab(n.id);
-                      setSearch("");
-                      setMobileMoreOpen(false);
-                    }}
-                  >
-                    <n.icon size={18} />
-                    <span>{n.name}</span>
-                  </button>
-                ))}
-              {platformAdmin && (
-                <Link href="/admin" onClick={() => setMobileMoreOpen(false)}>
-                  <ArrowUpRight size={18} />
-                  <span>Administração da plataforma</span>
-                </Link>
-              )}
-              <button type="button" className="danger" onClick={logout}>
-                <LogOut size={18} />
-                <span>Sair da conta</span>
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
