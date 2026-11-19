@@ -3,14 +3,16 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"geevheittire/api/internal/commercial"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"net/http"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"geevheittire/api/internal/commercial"
 )
 
 func managementError(w http.ResponseWriter, e error) {
