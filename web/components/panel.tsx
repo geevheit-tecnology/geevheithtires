@@ -49,6 +49,17 @@ type Vehicle = {
 type User = { id: string; company_id: string; name: string; email: string; role: string };
 type PendingInspection = { userId: string; companyId: string; tireId: string; tireCode: string; data: Record<string, unknown> };
 const pendingKey = "geevheittire-pending-inspections-v1";
+const snapshotKey = "geevheittire-offline-snapshot-v1";
+type OfflineSnapshot = {
+  user: User;
+  dash: Dashboard;
+  vehicles: Vehicle[];
+  tires: Tire[];
+  alerts: Alert[];
+  configurations: VehicleConfiguration[];
+  access: PlanAccess;
+  savedAt: string;
+};
 type Alert = {
   id: string;
   message: string;
@@ -121,9 +132,23 @@ export default function Panel() {
   }, [mobileMenuOpen]);
   const [pending, setPending] = useState<PendingInspection[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [offlineSince, setOfflineSince] = useState("");
   const syncingRef = useRef(false);
   useEffect(() => {
     try { const saved = JSON.parse(localStorage.getItem(pendingKey) || "[]"); if (Array.isArray(saved)) setPending(saved); } catch {}
+    if (typeof navigator !== "undefined" && !navigator.onLine) setIsOffline(true);
+    const handleOffline = () => setIsOffline(true);
+    const handleOnline = () => {
+      setIsOffline(false);
+      void load();
+    };
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
   }, []);
   function savePending(items: PendingInspection[]) {
     localStorage.setItem(pendingKey, JSON.stringify(items));
@@ -212,8 +237,32 @@ export default function Panel() {
     } while (cursor);
     return data;
   }
+  function restoreOfflineSnapshot(): boolean {
+    try {
+      const raw = localStorage.getItem(snapshotKey);
+      if (!raw) return false;
+      const snap = JSON.parse(raw) as OfflineSnapshot;
+      if (!snap?.user?.id || !snap?.dash) return false;
+      setUser(snap.user);
+      setDash(snap.dash);
+      setVehicles(Array.isArray(snap.vehicles) ? snap.vehicles : []);
+      setTires(Array.isArray(snap.tires) ? snap.tires : []);
+      setAlerts(Array.isArray(snap.alerts) ? snap.alerts : []);
+      setConfigurations(Array.isArray(snap.configurations) ? snap.configurations : []);
+      if (snap.access) setAccess(snap.access);
+      setOfflineSince(snap.savedAt || "");
+      setIsOffline(true);
+      setLoaded(true);
+      return true;
+    } catch {
+      return false;
+    }
+  }
   async function load() {
     setError("");
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      if (restoreOfflineSnapshot()) return;
+    }
     try {
       const u = await api("me");
       setUser(u);
@@ -232,37 +281,85 @@ export default function Panel() {
       setVehicles(v);
       setTires(t);
       setAlerts(a);
+      setIsOffline(false);
+      setOfflineSince("");
+      try {
+        const lightTires = (t as Tire[]).map(({ photo_data: _photo, ...rest }) => rest);
+        const snap: OfflineSnapshot = {
+          user: u,
+          dash: d,
+          vehicles: v,
+          tires: lightTires,
+          alerts: a,
+          configurations: configurations.data,
+          access: rights,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(snapshotKey, JSON.stringify(snap));
+      } catch {}
       if (u.role === "owner" || u.role === "manager")
         setUsers(await all("users"));
       setLoaded(true);
     } catch (e) {
-      setError((e as Error).message);
-      if ((e as Error).message.includes("Sessão")) router.replace("/login");
+      const msg = (e as Error).message || "";
+      if (msg.includes("Sessão")) {
+        router.replace("/login");
+        return;
+      }
+      const networkError =
+        e instanceof TypeError ||
+        (typeof navigator !== "undefined" && !navigator.onLine);
+      if (networkError && restoreOfflineSnapshot()) {
+        return;
+      }
+      setError(msg);
     }
   }
   useEffect(() => {
     void load();
   }, []);
   useEffect(()=>{
-    const timer=setInterval(()=>{if(document.visibilityState!=="visible")return;void Promise.all([api("dashboard"),all("alerts"),api("entitlements")]).then(([d,a,rights])=>{setDash(d);setAlerts(a);setAccess(rights)}).catch(()=>{})},60000);
+    const timer=setInterval(()=>{if(document.visibilityState!=="visible"||(typeof navigator!=="undefined"&&!navigator.onLine))return;void Promise.all([api("dashboard"),all("alerts"),api("entitlements")]).then(([d,a,rights])=>{setDash(d);setAlerts(a);setAccess(rights);setIsOffline(false)}).catch(()=>{})},60000);
     return()=>clearInterval(timer);
   },[]);
   async function openMap(v: Vehicle) {
     setError("");
+    const buildOfflineMap = () => {
+      const cfg = configurations.find((c) => c.id === v.template_id);
+      const positions = cfg?.positions || [];
+      const vehicleTires = tires.filter((t) => t.vehicle_id === v.id);
+      setMap({ vehicle: v, positions, tires: vehicleTires });
+      setTab("vehicles");
+    };
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      buildOfflineMap();
+      return;
+    }
     try {
       setMap(await api(`vehicles/${v.id}/tire-map`));
       setTab("vehicles");
     } catch (e) {
+      if (e instanceof TypeError) {
+        setIsOffline(true);
+        buildOfflineMap();
+        return;
+      }
       setError((e as Error).message);
     }
   }
   async function select(t: Tire) {
     setInspectionClient(crypto.randomUUID());
     setSelected(t);
+    setHistory([]);
     setModal("inspection");
+    if (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) return;
     try {
       setHistory((await api(`tires/${t.id}/history`)).data);
     } catch (e) {
+      if (e instanceof TypeError) {
+        setIsOffline(true);
+        return;
+      }
       setError((e as Error).message);
     }
   }
@@ -305,6 +402,19 @@ export default function Panel() {
       if(data.vehicle_km!==undefined && data.vehicle_km!=="") data.vehicle_km=Number(data.vehicle_km); else delete data.vehicle_km;
     }
     let inspectionAccepted = false;
+    if (modal === "inspection" && (isOffline || (typeof navigator !== "undefined" && !navigator.onLine)) && user && selected) {
+      try {
+        const items: PendingInspection[] = JSON.parse(localStorage.getItem(pendingKey) || "[]");
+        savePending([...items, { userId: user.id, companyId: user.company_id, tireId: selected.id, tireCode: selected.code, data }]);
+        setModal("");
+        setNotice("Inspeção salva neste aparelho (modo offline). Ela será enviada automaticamente quando o sinal voltar.");
+      } catch {
+        setError("Não foi possível guardar a inspeção neste aparelho. Mantenha o formulário aberto e tente novamente.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     try {
       const out = await api(endpoint, data);
       inspectionAccepted = modal === "inspection";
@@ -335,6 +445,7 @@ export default function Panel() {
   }
   async function logout() {
     try {
+      try { localStorage.removeItem(snapshotKey); } catch {}
       if (neonEnabled) {
         const out = await neonClient.signOut();
         if (out.error)
@@ -429,8 +540,8 @@ export default function Panel() {
               {!!dash?.alerts && <i className="mobile-menu-dot" aria-hidden="true" />}
             </button>
             <span>
-              <i className="dot ok" />
-              GeevheitTire / {nav.find((n) => n.id === tab)?.name}
+              <i className={isOffline ? "dot alerta" : "dot ok"} />
+              GeevheitTire / {nav.find((n) => n.id === tab)?.name}{isOffline ? " (Offline)" : ""}
             </span>
           </div>
           <div className="panel-header-actions">
@@ -463,6 +574,15 @@ export default function Panel() {
               <RefreshCw size={19} />
             </button>
           </div>
+          {isOffline && (
+            <div className="info" role="status">
+              <strong>Modo offline ativo.</strong>{" "}
+              {offlineSince
+                ? `Exibindo dados salvos em ${new Date(offlineSince).toLocaleString("pt-BR")}. `
+                : "Sem conexão com a internet. "}
+              Você pode consultar a frota e registrar inspeções normalmente; elas serão enviadas quando o sinal voltar.
+            </div>
+          )}
           {error && (
             <div role="alert" className="error">
               {error}<button className="table-link" onClick={()=>{setSupportDraft(`Erro observado: ${error}\nMódulo: ${tab}\nDescreva os passos para reproduzir:`);setTab("support");setError("")}}>Reportar este erro</button>

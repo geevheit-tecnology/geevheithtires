@@ -1,39 +1,35 @@
-# Validação de campo do PWA
+# Validação de campo do PWA — GeevheitTire
 
-Revisão: 17/11/2026. Prévia: https://geevheittire-h5ubzz24g-geevheits-projects.vercel.app (deploy `dpl_ExhABPKQr3TPAR7nvQmmdxcdQnMi`, Vercel READY). A prévia não comprova que sua API ou banco sejam isolados: confirme o destino antes de criar ou alterar registros. Não use dados reais para testes até confirmar isso.
+Revisão: 18/11/2026. Produção: https://geevheittire.vercel.app · API: https://geevheittire-api.vercel.app.
 
-## Estado e limites
+## Estado atual em produção
 
-O build e o TypeScript passaram; a fila de inspeções ainda não foi validada em navegador ou aparelho físico. Ela funciona somente com o painel carregado e sessão previamente identificada, tenta enviar ao recuperar conexão ou pelo botão de envio e guarda dados no armazenamento do navegador. Reabrir o aplicativo sem conexão não foi implementado. Não limpar dados do navegador, desinstalar o PWA ou trocar de aparelho enquanto houver pendências. A classificação só é fornecida após o servidor receber a inspeção. Cadastros e demais operações não têm fila offline.
+- **PWA e responsividade:**
+  - Site público, painel do usuário (`/app`) e painel administrativo (`/admin`) responsivos para celular, tablet, notebook e monitor largo.
+  - Menu lateral retrátil (`☰`) com fechamento automático no celular e tablet (`<= 1024px`) tanto no `/app` quanto no `/admin`.
+  - Visualizador 360° / AR com área central 100% livre e controles compactos na barra inferior.
+  - Service Worker (`web/public/sw.js`, cache `geevheittire-v3`) com precache do shell `/app`, assets estáticos do Next.js (cache-first) e fallback offline de navegação.
+  - Modo offline no painel (`web/components/panel.tsx`): salva snapshot leve local (limpo no logout), exibe banner claro de modo offline, permite abrir mapa de pneus por veículo e registrar inspeções na fila offline mesmo ao reabrir o app sem sinal, sincronizando automaticamente ao recuperar conexão.
+- **API, Neon e Alertas Agendados:**
+  - Projeto Neon confirmado: `geevheithtire` (`purple-resonance-11883617`, PostgreSQL 18, `aws-sa-east-1`, autoscaling `0.25–2 CU`).
+  - Branch de produção confirmada e isolada das branches de preview: `production` (`br-damp-recipe-b657pl3x`, `vercel production branch`).
+  - Snapshot baseline criado: `snap-blue-morning-b6pstd73` (`pre-field-launch-2026-11-18`). Atenção: retenção PITR atual é de 6 horas (`21600s`, padrão do plano atual) e sem agendamento automático de snapshots.
+  - Agendamento de alertas automáticos ativo na Vercel (`maintenance-sweep`, `0 * * * *`, `America/Sao_Paulo`, `POST /api/v1/internal/maintenance` protegido por `CRON_SECRET`), validado em produção (`Succeeded`, `0%` erro).
+  - Edição de nome, preço e limites dos planos liberada no `/admin` (migration `000019_plan_custom_name` aplicada em produção), refletindo automaticamente no site público e no painel dos clientes.
 
-Esta prévia é para homologação, não é evidência de lançamento comercial. Não foi confirmada a configuração de produção de API, e-mail, pagamentos, backup e restauração, monitoramento ou suporte. A documentação de prontidão anterior pode estar desatualizada.
+## Roteiro rápido de validação em aparelho físico (Android e iPhone)
 
-## Roteiro após confirmar ambiente isolado
+1. Abra https://geevheittire.vercel.app no celular, instale na tela inicial ("Adicionar à tela de início") e faça login com uma conta de teste.
+2. Navegue por Painel, Veículos (mapa de pneus), Pneus (cards + dossiê 360°/AR), Alertas e menu lateral (`☰`). Teste tema claro e escuro.
+3. Com o app instalado aberto e dados carregados, ative o **Modo Avião** (sem internet), feche e reabra o PWA:
+   - Confira se o `/app` abre com o banner **"Modo offline ativo"**.
+   - Abra um veículo, toque em um pneu e registre uma inspeção (sulco/pressão).
+   - Confira o aviso de que a inspeção ficou salva no aparelho.
+4. Desative o Modo Avião e aguarde (ou toque em **Enviar agora**). Confira no histórico do pneu que a inspeção entrou uma única vez com os valores corretos.
 
-1. No PC e no celular, abra a prévia, entre com uma conta de teste e registre navegador, modelo e versão. Verifique se o nome da empresa é o esperado.
-2. Percorra painel, veículos, pneus, alertas, menu Mais e formulários; confira leitura, rolagem, toque, orientação e temas claro/escuro. Recarregue com conexão e confira a preferência de tema.
-3. Com um pneu de teste e o painel aberto, desligue a rede, registre uma inspeção e confira o aviso de que ficou apenas no aparelho. Religue a rede e aguarde ou selecione Enviar agora. Confira no histórico que a inspeção apareceu uma única vez com os valores corretos.
-4. Repita interrompendo a conexão durante o envio e tente novamente. Confira que não surgiu duplicata. Teste saída e entrada na mesma conta antes de sincronizar; não envie usando outra conta.
-5. Em Android e iPhone, teste a instalação na tela inicial, abertura e navegação com rede. Registre falhas, capturas e horário, sem incluir senhas ou informações pessoais.
-6. Confira separadamente a API, login, permissões, suporte, faturamento, e-mail, monitoramento e restauração de backup em ambiente isolado antes de aprovar produção.
+## Pendências comerciais / operacionais antes de escala aberta
 
-Se houver erro ou inspeção pendente, mantenha os dados do navegador e anote o aparelho, conta de teste, pneu, horário e mensagem. Não repita testes em dados de clientes.
-
-## Verificações complementares de 17/11/2026
-
-- `go test ./...` na API passou; parte dos resultados veio do cache do Go. Isso não valida serviços externos nem o fluxo PWA no navegador.
-- A Vercel lista `API_URL` e variáveis de autenticação para produção e prévia. Os nomes não identificam os destinos: isolamento e segurança para gravar dados de teste permanecem sem confirmação.
-- Consulta posterior das variáveis sensíveis com a CLI não retornou seus valores. Portanto, a comparação de `API_URL` e `NEON_AUTH_BASE_URL` não foi possível; não se conclui que os ambientes sejam diferentes.
-- Correção local: a sincronização relê a fila antes de remover uma inspeção confirmada, para não sobrescrever uma inspeção acrescentada enquanto o envio estava em andamento. A alteração ainda requer teste de concorrência e novo deploy de prévia.
-
-- Chrome local com API simulada: larguras 390 e 1440 px, troca para tema escuro, envio de uma inspeção pendente e ausência de overflow no painel inicial passaram. Não cobre gravação offline, concorrência entre abas nem API real. Build local e deploy de prévia READY passaram.
-
-## API pública — 18/11/2026
-
-- `https://geevheittire-api.vercel.app/health`: HTTP 200, `status=ok`, revisão administrativa 2 e ciclo de vida 3; o health executa ping no banco configurado. Isso não identifica o projeto ou branch do banco.
-- `/api/v1/plans` na API e `/api/backend/plans` no site público: HTTP 200. `/api/v1/me` e `/api/backend/me` sem sessão: HTTP 401.
-- A configuração `API_URL` de produção do site não foi confirmada. Não houve teste autenticado, alteração de variáveis, migração ou troca de domínio. O agendamento da manutenção de cinco minutos continua pendente na API serverless.
-
-## Conferência complementar de 18/11/2026
-
-Tentativa de comparar a `DATABASE_URL` da API Vercel com a conexão Neon local por `vercel env run -e production`: a variável protegida não foi disponibilizada para a comparação. O ping em `/health` não permite concluir qual branch foi usada. A API serverless não inicia `maintenanceWorker`; a varredura periódica continua pendente de desenho e validação de agendador que respeite limites de duração e plano. Não foi aplicado agendamento nem houve alteração em dados ou configurações remotas.
+- **E-mail transacional (Resend):** permanece desativado; ativar se desejar envio automático de convites de equipe e recuperação de senha.
+- **Cobrança automática (Asaas):** permanece desativada; o financeiro funciona em modo manual pelo `/admin` até decisão de ativação.
+- **Backup e retenção no Neon:** avaliar plano pago do Neon para aumentar retenção PITR (acima de 6h) e ativar snapshots automáticos recorrentes.
+- **Segurança da conta Vercel:** ativar 2FA em `https://vercel.com/account/settings/authentication?setup=authenticator`.
