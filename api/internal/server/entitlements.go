@@ -31,11 +31,14 @@ func (a *App) resolveEntitlements(r *http.Request) (entitlements, error) {
 	}
 	defer t.Rollback(r.Context())
 	var paid, trial, suspended bool
-	var plan string
+	var plan, dbPlanName string
 	var vehicles, users int
-	e = t.QueryRow(r.Context(), `select coalesce(s.plan_id,''),coalesce(s.paid_until>now(),false),c.trial_ends_at>now(),s.suspended,s.vehicle_limit,s.user_limit from companies c join subscriptions s on s.company_id=c.id where c.id=$1 and c.deleted_at is null`, claims(r).Company).Scan(&plan, &paid, &trial, &suspended, &vehicles, &users)
+	e = t.QueryRow(r.Context(), `select coalesce(s.plan_id,''),coalesce(bp.name,''),coalesce(s.paid_until>now(),false),c.trial_ends_at>now(),s.suspended,s.vehicle_limit,s.user_limit from companies c join subscriptions s on s.company_id=c.id left join billing_plans bp on bp.id=coalesce(nullif(s.plan_id,''),'starter') where c.id=$1 and c.deleted_at is null`, claims(r).Company).Scan(&plan, &dbPlanName, &paid, &trial, &suspended, &vehicles, &users)
 	if e != nil {
 		return out, e
+	}
+	if strings.TrimSpace(dbPlanName) != "" {
+		out.PlanName = strings.TrimSpace(dbPlanName)
 	}
 	out.Status = "expired"
 	if paid {
@@ -44,7 +47,11 @@ func (a *App) resolveEntitlements(r *http.Request) (entitlements, error) {
 		out.UserLimit = users
 		if p, ok := commercial.Find(plan); ok {
 			out.PlanID = p.ID
-			out.PlanName = p.Name
+			if strings.TrimSpace(dbPlanName) != "" {
+				out.PlanName = strings.TrimSpace(dbPlanName)
+			} else {
+				out.PlanName = p.Name
+			}
 		}
 	}
 	if !paid && trial {

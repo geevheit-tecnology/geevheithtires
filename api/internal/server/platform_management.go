@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 func managementError(w http.ResponseWriter, e error) {
@@ -92,6 +93,7 @@ func (a *App) platformConfigurePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	var d struct {
 		Version     int64  `json:"expected_version"`
+		Name        string `json:"name"`
 		Price       int    `json:"price_cents"`
 		Vehicles    int    `json:"vehicle_limit"`
 		Users       int    `json:"user_limit"`
@@ -102,12 +104,18 @@ func (a *App) platformConfigurePlan(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &d) {
 		return
 	}
+	d.Name = strings.TrimSpace(d.Name)
+	nameLen := utf8.RuneCountInString(d.Name)
+	if d.Name != "" && (nameLen < 2 || nameLen > 60) {
+		problem(w, 422, "Informe um nome de plano entre 2 e 60 caracteres.")
+		return
+	}
 	if d.Version < 1 || !validReason(d.Reason) || d.Price < 0 || d.Price > 100000000 || d.Vehicles < 1 || d.Vehicles > 100000 || d.Users < 1 || d.Users > 10000 || (d.Published && d.Price == 0) {
 		problem(w, 422, "Informe limites válidos e justificativa. Para publicar, defina um valor maior que zero.")
 		return
 	}
 	var result json.RawMessage
-	e := a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason).Scan(&result)
+	e := a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason, d.Name).Scan(&result)
 	if e != nil {
 		managementError(w, e)
 		return
@@ -167,21 +175,27 @@ func (a *App) platformCloseClient(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, map[string]bool{"ok": true})
 }
 func (a *App) publicPlans(w http.ResponseWriter, r *http.Request) {
-	rows, e := a.db.Query(r.Context(), "select id,vehicle_limit,user_limit,price_cents from billing_plans where published")
+	rows, e := a.db.Query(r.Context(), "select id,name,vehicle_limit,user_limit,price_cents from billing_plans where published")
 	if e != nil {
 		problem(w, 503, "Não foi possível consultar os planos.")
 		return
 	}
 	defer rows.Close()
-	offers := map[string]map[string]int{}
+	type planOffer struct {
+		name     string
+		vehicles int
+		users    int
+		price    int
+	}
+	offers := map[string]planOffer{}
 	for rows.Next() {
-		var id string
+		var id, name string
 		var vehicles, users, price int
-		if e = rows.Scan(&id, &vehicles, &users, &price); e != nil {
+		if e = rows.Scan(&id, &name, &vehicles, &users, &price); e != nil {
 			problem(w, 503, "Não foi possível consultar os planos.")
 			return
 		}
-		offers[id] = map[string]int{"vehicle_limit": vehicles, "user_limit": users, "price_cents": price}
+		offers[id] = planOffer{name: strings.TrimSpace(name), vehicles: vehicles, users: users, price: price}
 	}
 	if rows.Err() != nil {
 		problem(w, 503, "Não foi possível consultar os planos.")
@@ -194,9 +208,12 @@ func (a *App) publicPlans(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(raw, &item)
 		item["display_price_cents"] = 0
 		if offer, ok := offers[p.ID]; ok {
-			item["vehicle_limit"] = offer["vehicle_limit"]
-			item["user_limit"] = offer["user_limit"]
-			item["display_price_cents"] = offer["price_cents"]
+			if offer.name != "" {
+				item["name"] = offer.name
+			}
+			item["vehicle_limit"] = offer.vehicles
+			item["user_limit"] = offer.users
+			item["display_price_cents"] = offer.price
 		}
 		out = append(out, item)
 	}

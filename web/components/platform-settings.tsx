@@ -22,10 +22,12 @@ export function AdminPlans({
     setError("");
     setNotice("");
     try {
+      const nextName = String(f.get("name") || "").trim();
       const out = await api(
         `platform/plans/${p.id}`,
         {
           expected_version: p.version,
+          name: nextName,
           price_cents: Math.round(Number(f.get("price")) * 100),
           vehicle_limit: Number(f.get("vehicle_limit")),
           user_limit: Number(f.get("user_limit")),
@@ -35,8 +37,9 @@ export function AdminPlans({
         },
         "PUT",
       );
+      const savedName = out.name || nextName || p.name;
       setNotice(
-        `Plano ${p.name} salvo. ${f.get("published") === "on" ? "Preço e limites publicados na plataforma." : "Condições mantidas em rascunho."}${out.clients_updated ? ` Limites atualizados em ${out.clients_updated} cliente(s).` : " Mensalidades existentes preservadas."}`,
+        `Plano ${savedName} salvo. ${f.get("published") === "on" ? "Nome, preço e limites publicados na plataforma." : "Condições mantidas em rascunho."}${out.clients_updated ? ` Limites atualizados em ${out.clients_updated} cliente(s).` : " Mensalidades existentes preservadas."}`,
       );
       await onChange();
     } catch (e) {
@@ -89,6 +92,17 @@ export function AdminPlans({
               </div>
               <form onSubmit={(e) => void save(e, p)}>
                 <fieldset className="plain-fields" disabled={busy}>
+                  <label>
+                    Nome do plano
+                    <input
+                      type="text"
+                      name="name"
+                      minLength={2}
+                      maxLength={60}
+                      defaultValue={p.name}
+                      required
+                    />
+                  </label>
                   <label>
                     Valor mensal de {p.name} (R$)
                     <input

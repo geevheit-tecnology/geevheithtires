@@ -396,7 +396,7 @@ export default function Home() {
             {offers.map((p, i) => (
               <article
                 className={`plan ${i === 1 ? "featured" : ""}`}
-                key={p.name}
+                key={p.id}
               >
                 {i === 1 && (
                   <span className="plan-tag">PARA FROTAS EM CRESCIMENTO</span>
@@ -411,7 +411,7 @@ export default function Home() {
                   href="/cadastro"
                   className={`button ${i === 1 ? "" : "outline"}`}
                 >
-                  {p.id === "starter" ? "Avaliar o Starter" : `Conhecer o ${p.name}`} <ArrowUpRight size={16} />
+                  {p.id === "starter" ? `Avaliar o ${p.name}` : `Conhecer o ${p.name}`} <ArrowUpRight size={16} />
                 </Link>
                 <p className="plan-quota">{p.vehicle_limit?`Até ${p.vehicle_limit} veículos e ${p.user_limit} usuários`:"Limites e atendimento sob consulta"}</p>
                 <PlanBenefits features={p.features} planned={p.planned}/>
