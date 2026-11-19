@@ -440,24 +440,24 @@ export function TireViewer360AR({
         )}
 
         {arError && <div className="tire-ar-error">{arError}</div>}
+      </div>
 
-        <div className="tire-360-telemetry-strip">
-          <div>
-            <small>PNEU</small>
-            <strong>{code}</strong>
-          </div>
-          <div>
-            <small>SULCO</small>
-            <strong>{treadMm.toFixed(1)} mm</strong>
-          </div>
-          <div>
-            <small>PRESSÃO</small>
-            <strong>{pressurePsi ? `${pressurePsi} PSI` : "—"}</strong>
-          </div>
-          <div>
-            <small>VIDA</small>
-            <strong>{retreadCount + 1}ª vida</strong>
-          </div>
+      <div className="tire-360-telemetry-strip">
+        <div>
+          <small>PNEU</small>
+          <strong>{code}</strong>
+        </div>
+        <div>
+          <small>SULCO</small>
+          <strong>{treadMm.toFixed(1)} mm</strong>
+        </div>
+        <div>
+          <small>PRESSÃO</small>
+          <strong>{pressurePsi ? `${pressurePsi} PSI` : "—"}</strong>
+        </div>
+        <div>
+          <small>VIDA</small>
+          <strong>{retreadCount + 1}ª vida</strong>
         </div>
       </div>
 
