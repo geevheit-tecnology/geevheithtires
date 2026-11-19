@@ -1008,6 +1008,8 @@ func NewRouter(a *App) http.Handler {
 			r.Get("/billing", a.billingStatus)
 			r.Get("/entitlements", a.entitlementStatus)
 			r.Post("/billing/checkout", a.checkout)
+			r.Post("/billing/pix", a.createPixCharge)
+			r.Post("/billing/pix/notify", a.notifyPixPaid)
 			r.Get("/platform/me", a.platformMe)
 			r.Get("/platform", a.platformDashboard)
 			r.Post("/platform/change", a.platformChange)

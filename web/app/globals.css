@@ -3566,3 +3566,85 @@ img, svg, canvas, video {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* === Manual PIX Payment Box === */
+.pix-box {
+  margin: 22px 0;
+  padding: clamp(18px, 3vw, 26px);
+  border-radius: 14px;
+  border: 2px solid var(--green);
+  background: #f2f7f3;
+  display: grid;
+  gap: 16px;
+}
+.pix-box-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pix-box-head h3 {
+  font-size: 22px;
+  margin-top: 4px;
+}
+.pix-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 14px;
+}
+.pix-field {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+.pix-field strong {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.pix-field .button {
+  width: fit-content;
+  max-width: 100%;
+}
+.pix-payload {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-all;
+  color: var(--ink);
+}
+.pix-bank-info {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.pix-notify-form {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.pix-notify-form label {
+  margin-bottom: 0;
+}
+.panel[data-theme="dark"] .pix-box {
+  background: #1d2f27;
+  border-color: var(--green);
+}
+.panel[data-theme="dark"] .pix-field,
+.panel[data-theme="dark"] .pix-payload {
+  background: #25352d;
+  border-color: var(--line);
+  color: var(--ink);
+}

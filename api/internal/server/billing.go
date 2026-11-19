@@ -147,6 +147,41 @@ func (a *App) billingStatus(w http.ResponseWriter, r *http.Request) {
 	out["features"] = rights.Features
 	out["payments_enabled"] = asaasFromEnv() != nil
 	out["environment"] = os.Getenv("ASAAS_ENVIRONMENT")
+	cfg := pixSettings()
+	out["pix_enabled"] = true
+	out["pix_info"] = cfg
+	if invs, ok := out["invoices"].([]any); ok {
+		for _, item := range invs {
+			inv, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			st, _ := inv["status"].(string)
+			src, _ := inv["source"].(string)
+			ref, _ := inv["reference"].(string)
+			if (st == "pending" || st == "overdue") && src == "manual" && strings.TrimSpace(ref) != "" {
+				centsFloat, _ := inv["price_cents"].(float64)
+				cents := int(centsFloat)
+				txid := sanitizeTxID(ref)
+				out["active_pix"] = map[string]any{
+					"invoice_id":    inv["id"],
+					"plan_id":       inv["plan_id"],
+					"price_cents":   cents,
+					"due_date":      inv["due_date"],
+					"reference":     ref,
+					"txid":          txid,
+					"pix_payload":   buildPixPayload(cfg, cents, txid),
+					"pix_key":       cfg.Key,
+					"receiver_name": cfg.ReceiverName,
+					"bank_code":     cfg.BankCode,
+					"bank_name":     cfg.BankName,
+					"agency":        cfg.Agency,
+					"account":       cfg.Account,
+				}
+				break
+			}
+		}
+	}
 	write(w, 200, out)
 }
 

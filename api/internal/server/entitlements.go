@@ -3,9 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"geevheittire/api/internal/commercial"
 	"net/http"
 	"strings"
+
+	"geevheittire/api/internal/commercial"
 )
 
 type entitlementKey struct{}
@@ -69,7 +70,7 @@ func (a *App) resolveEntitlements(r *http.Request) (entitlements, error) {
 func (a *App) entitlementContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Billing and platform administration must remain available even if an account needs attention.
-		if r.URL.Path == "/api/v1/billing" || r.URL.Path == "/api/v1/billing/checkout" || strings.HasPrefix(r.URL.Path, "/api/v1/platform") || strings.HasPrefix(r.URL.Path, "/api/v1/support/") || r.URL.Path == "/api/v1/account/close" {
+		if r.URL.Path == "/api/v1/billing" || r.URL.Path == "/api/v1/billing/checkout" || r.URL.Path == "/api/v1/billing/pix" || r.URL.Path == "/api/v1/billing/pix/notify" || strings.HasPrefix(r.URL.Path, "/api/v1/platform") || strings.HasPrefix(r.URL.Path, "/api/v1/support/") || r.URL.Path == "/api/v1/account/close" {
 			next.ServeHTTP(w, r)
 			return
 		}
