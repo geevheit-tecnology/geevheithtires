@@ -1,0 +1,11 @@
+import LegalDocument from "../../components/legal-document";
+export const metadata = { title: "Política de Privacidade | GeevheitTire" };
+export default function PrivacyPage() {
+  return <LegalDocument title="Política de Privacidade">
+    <section><h2>Informações utilizadas</h2><p>O cadastro utiliza nome, e-mail, credenciais e dados da empresa, incluindo CNPJ e endereço quando informado. A operação registra veículos, pneus, inspeções, movimentações, usuários e registros de auditoria vinculados à empresa. O cadastro de motoristas utiliza nome e, quando informados pela empresa, telefone, número e validade da CNH. O histórico de movimentações dos pneus pode registrar o nome do motorista responsável pelo veículo.</p></section>
+    <section><h2>Finalidades e fornecedores</h2><p>Os dados permitem autenticação, gestão da frota, controle de acesso, auditoria e comunicação de serviço. A arquitetura utiliza serviços de hospedagem e banco gerenciado. Consultas cadastrais e, quando configurados, os provedores de autenticação, e-mail e pagamento processam os dados necessários a esses fluxos. A lista contratual de operadores, as bases legais e as condições de transferência internacional dependem de revisão antes da publicação final.</p></section>
+    <section><h2>Cookies de sessão</h2><p>O site utiliza cookies para manter a autenticação. Os cookies de acesso do painel são protegidos contra leitura por JavaScript e usam conexão segura em produção. A inclusão de ferramentas de publicidade ou análise exige avaliação específica e atualização deste aviso antes da ativação.</p></section>
+    <section><h2>Retenção e direitos</h2><p>Os prazos de retenção e os procedimentos de acesso, correção, exportação e exclusão precisam ser formalizados. Os recursos de exportação e exclusão da conta ainda não estão disponíveis no produto. O responsável deve definir um canal para solicitações e concluir esses procedimentos antes do lançamento comercial.</p></section>
+    <section><h2>Responsável pelo tratamento</h2><p>Pendente de preenchimento: identificação e contato do controlador, canal de privacidade, fornecedores efetivamente contratados, prazos de retenção e data de vigência da versão aprovada.</p></section>
+  </LegalDocument>;
+}

@@ -1,0 +1,57 @@
+name: Neon PR database
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-pr-${{ github.event.number }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Neon integration
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+        run: |
+          test -n "$NEON_API_KEY" || { echo 'Connect Neon GitHub App to configure NEON_API_KEY'; exit 1; }
+          test -n "$NEON_PROJECT_ID" || { echo 'Connect Neon GitHub App to configure NEON_PROJECT_ID'; exit 1; }
+      - uses: neondatabase/create-branch-action@v6
+        id: database
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          parent_branch: production
+          branch_name: preview/pr-${{ github.event.number }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+      - name: Migrate isolated database
+        working-directory: api
+        env:
+          DATABASE_URL: ${{ steps.database.outputs.db_url }}
+        run: go run ./cmd/migrate
+      - name: Test persistence and tenant isolation
+        working-directory: api
+        env:
+          TEST_DATABASE_URL: ${{ steps.database.outputs.db_url }}
+        run: go test -v ./...
+  cleanup:
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: preview/pr-${{ github.event.number }}
+          api_key: ${{ secrets.NEON_API_KEY }}

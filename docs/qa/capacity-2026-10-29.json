@@ -1,0 +1,49 @@
+{
+  "scenario": {
+    "companies": 100,
+    "users": 500,
+    "vehicles": 1000,
+    "tires": 8000,
+    "base_inspections": 8000
+  },
+  "environment": "Local Go API with isolated real Neon PostgreSQL; not a Render capacity guarantee",
+  "phases": [
+    {
+      "concurrency": 10,
+      "requests": 934,
+      "errors": 0,
+      "elapsed_seconds": 15.29,
+      "requests_per_second": 61.08,
+      "p50_ms": 130.7,
+      "p95_ms": 402.1,
+      "p99_ms": 544.2
+    },
+    {
+      "concurrency": 25,
+      "requests": 1257,
+      "errors": 0,
+      "elapsed_seconds": 15.56,
+      "requests_per_second": 80.8,
+      "p50_ms": 266.6,
+      "p95_ms": 711.2,
+      "p99_ms": 789.5
+    },
+    {
+      "concurrency": 50,
+      "requests": 1398,
+      "errors": 0,
+      "elapsed_seconds": 15.74,
+      "requests_per_second": 88.79,
+      "p50_ms": 557.3,
+      "p95_ms": 961.1,
+      "p99_ms": 1363.8
+    }
+  ],
+  "statuses": {
+    "200": 3230,
+    "201": 359
+  },
+  "errors": [],
+  "total_requests": 3589,
+  "distinct_identities": 500
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "schedules": {
+    "maintenance-sweep": {
+      "schedule": "0 * * * *",
+      "timezone": "America/Sao_Paulo",
+      "path": "/api/v1/internal/maintenance",
+      "requestMethod": "POST"
+    }
+  }
+}
