@@ -2775,7 +2775,7 @@ td small {
 .panel[data-theme="dark"] .sidebar { color: #fff; }
 .panel[data-theme="dark"] .user-avatar { background: #41594a; color: #fff; }
 
-@media (max-width: 800px) {
+@media (max-width: 1024px) {
   html, body {
     overflow-x: clip;
     -webkit-text-size-adjust: 100%;
@@ -3204,5 +3204,354 @@ td small {
   .panel .stats,
   .panel .inventory-summary {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* === Universal Fluid Responsiveness (Site, User Panel & Admin) === */
+html, body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+img, svg, canvas, video {
+  max-width: 100%;
+}
+
+/* 1. Public Site & Auth: comfortable spacing and readable typography */
+.container {
+  width: min(1240px, calc(100% - clamp(28px, 5vw, 80px)));
+}
+.eyebrow { font-size: 12px; letter-spacing: 1.4px; }
+.hero h1 { font-size: clamp(34px, 5vw, 66px); }
+.hero-copy > p { font-size: 16px; max-width: 500px; line-height: 1.7; }
+.hero-notes { font-size: 12px; flex-wrap: wrap; }
+.hero-grid {
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 72px);
+}
+.section-heading > p { max-width: 420px; font-size: 15px; line-height: 1.7; }
+.feature-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.feature p { font-size: 14px; line-height: 1.7; }
+.feature > a { font-size: 13px; }
+.savings-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(32px, 6vw, 88px); }
+.savings-grid > div > p { max-width: 460px; font-size: 15px; line-height: 1.7; }
+.caption, .center-heading p { font-size: 14px; line-height: 1.6; }
+.plans { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.plan { display: flex; flex-direction: column; padding: 30px 26px; }
+.plan > p { font-size: 14px; line-height: 1.6; }
+.plan .button { font-size: 14px; padding: 13px 16px; }
+.plan ul { font-size: 14px; }
+.plan li { font-size: 14px; line-height: 1.5; }
+.faq { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr); gap: clamp(28px, 6vw, 80px); }
+.faq summary { font-size: 16px; line-height: 1.4; }
+.faq details p { font-size: 14px; line-height: 1.7; }
+.cta { padding: clamp(28px, 4vw, 48px) clamp(22px, 5vw, 60px); gap: 24px; }
+.cta h2 { font-size: clamp(28px, 3.6vw, 40px); }
+.auth-layout { grid-template-columns: minmax(0, 44%) minmax(0, 56%); }
+.auth-layout h1 { font-size: clamp(32px, 4vw, 52px); }
+.auth-main { padding: clamp(24px, 4vw, 48px) clamp(18px, 4vw, 56px); }
+.auth-box { max-width: 440px; }
+
+@media (max-width: 1080px) {
+  .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plans { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+}
+@media (max-width: 960px) {
+  .nav { height: 74px; gap: 12px; }
+  .nav nav { display: none; }
+  .nav nav.open {
+    display: flex;
+    position: absolute;
+    top: 74px;
+    left: 0;
+    right: 0;
+    padding: 18px 20px 22px;
+    background: white;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 12px 32px rgba(20, 32, 29, 0.08);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .nav nav.open a {
+    padding: 10px 6px;
+    font-size: 16px;
+  }
+  .menu-toggle {
+    display: flex;
+    margin-left: auto;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav-actions .button { display: none; }
+  .hero-grid,
+  .savings-grid,
+  .faq,
+  .auth-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-grid { padding-block: 42px 36px; }
+  .cta { flex-direction: column; align-items: flex-start; }
+  .auth-layout aside { padding: 24px 20px; gap: 16px; }
+  .auth-layout aside > div,
+  .auth-layout aside > span { display: none; }
+}
+@media (max-width: 680px) {
+  .feature-grid,
+  .plans { grid-template-columns: minmax(0, 1fr); }
+  .section { padding-block: 48px; }
+  .calculator { padding: 22px 18px; }
+  .plan { padding: 24px 20px; }
+}
+
+/* 2. User Panel (/app): no cramped grids across laptops, tablets, and phones */
+.panel .panel-content {
+  padding: clamp(20px, 3vw, 36px) clamp(16px, 3vw, 40px) 48px;
+}
+.panel .commercial-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 18px;
+}
+.panel .tire-inventory .form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+}
+.panel .lifecycle-facts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 14px;
+}
+.panel .lifecycle-actions label {
+  min-width: min(100%, 240px);
+  flex: 1 1 240px;
+}
+.panel .report-feedback {
+  min-width: 0;
+  max-width: 100%;
+}
+.panel .registration-buttons,
+.panel .steps {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 12px;
+}
+.panel .management-section,
+.panel .reports-section,
+.panel .plan-status,
+.panel .lifecycle-policy,
+.panel .lifecycle-details {
+  padding: clamp(18px, 3vw, 28px);
+}
+@media (max-width: 1280px) {
+  .panel .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+@media (max-width: 1180px) {
+  .panel .fleet-grid,
+  .panel .panel-columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+}
+@media (max-width: 520px) {
+  .panel .stats {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .panel .stat {
+    padding: 16px 18px;
+  }
+  .panel .inventory-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .panel .panel-content {
+    padding: 16px 14px 32px;
+  }
+  .panel :is(td, th) {
+    padding: 12px 14px;
+  }
+}
+@media (max-width: 360px) {
+  .panel .inventory-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 3. Platform Admin (/admin): collapsible drawer on tablet/mobile + spacious grids */
+.admin-sidebar-backdrop { display: none; }
+.admin-menu-trigger { display: none; }
+.admin-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.admin-topbar-left > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-main {
+  padding: clamp(20px, 3vw, 32px) clamp(16px, 3vw, 36px);
+}
+.admin-plan-card .form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+}
+.admin-quick-actions {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+}
+.admin-finance-toolbar,
+.admin-client-search {
+  flex-wrap: wrap;
+}
+.admin-shell .table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 1400px) {
+  .admin-plan-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1360px) {
+  .admin-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1100px) {
+  .admin-overview-grid,
+  .admin-account-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 1024px) {
+  .admin-shell {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+  }
+  .admin-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 44;
+    background: rgba(16, 25, 23, 0.52);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 45;
+    width: min(300px, 84vw);
+    max-width: 300px;
+    padding: calc(18px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));
+    gap: 20px;
+    overflow-y: auto;
+    transform: translateX(-105%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), visibility 0.24s ease;
+    box-shadow: 12px 0 36px rgba(0, 0, 0, 0.28);
+    overscroll-behavior: contain;
+  }
+  .admin-sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+  .admin-sidebar-close {
+    display: inline-flex;
+  }
+  .admin-workspace {
+    display: flex;
+  }
+  .admin-sidebar nav {
+    flex-direction: column;
+    overflow: visible;
+    gap: 6px;
+    padding-bottom: 0;
+  }
+  .admin-sidebar nav button {
+    width: 100%;
+    min-height: 48px;
+    font-size: 15px;
+    gap: 12px;
+  }
+  .admin-sidebar-footer {
+    display: grid;
+    margin-top: auto;
+    border-top: 1px solid #ffffff24;
+    padding-top: 16px;
+    gap: 10px;
+  }
+  .admin-sidebar-footer :is(a, button) {
+    font-size: 14px;
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+  .admin-menu-trigger {
+    display: inline-flex;
+    position: relative;
+  }
+  .admin-body {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+  }
+  .admin-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    height: auto;
+    min-height: 60px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+@media (max-width: 960px) {
+  .admin-plan-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-revenue-chart {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 20px;
+  }
+}
+@media (max-width: 600px) {
+  .admin-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-heading h1 {
+    font-size: 26px;
+  }
+  .admin-shell .management-section {
+    padding: 18px 16px;
+  }
+  .admin-plan-card {
+    padding: 20px 16px;
+  }
+  .admin-shell :is(th, td) {
+    padding: 12px 10px;
+    min-width: 110px;
+  }
+}
+@media (max-width: 480px) {
+  .admin-revenue-chart {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

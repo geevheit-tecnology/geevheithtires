@@ -10,11 +10,13 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  Menu,
   RefreshCw,
   Settings,
   ShieldCheck,
   Users,
   Wallet,
+  X,
 } from "lucide-react";
 import { Brand } from "./brand";
 import { api, ApiError } from "./api";
@@ -104,7 +106,16 @@ export default function PlatformAdmin() {
   const [data, setData] = useState<Snapshot | null>(null),
     [error, setError] = useState(""),
     [tab, setTab] = useState("overview"),
-    [updated, setUpdated] = useState("");
+    [updated, setUpdated] = useState(""),
+    [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
   const load = useCallback(async () => {
     try {
       setData(await api("platform"));
@@ -140,11 +151,13 @@ export default function PlatformAdmin() {
   function navigate(id: string) {
     setTab(id);
     setError("");
+    setMenuOpen(false);
     window.history.replaceState(null, "", `#${id}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function logout() {
     try {
+      setMenuOpen(false);
       await api("auth/logout", {});
       router.replace("/admin/login");
     } catch (e) {
@@ -154,8 +167,25 @@ export default function PlatformAdmin() {
   const selected = tabs.find((t) => t.id === tab)!;
   return (
     <div className="admin-shell commercial-admin">
-      <aside className="admin-sidebar">
-        <Brand />
+      {menuOpen && (
+        <div
+          className="admin-sidebar-backdrop"
+          aria-hidden="true"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+      <aside id="admin-sidebar" className={menuOpen ? "admin-sidebar open" : "admin-sidebar"}>
+        <div className="sidebar-top">
+          <Brand />
+          <button
+            type="button"
+            className="sidebar-close admin-sidebar-close"
+            aria-label="Fechar menu administrativo"
+            onClick={() => setMenuOpen(false)}
+          >
+            <X size={20} />
+          </button>
+        </div>
         <div className="admin-workspace">
           <ShieldCheck size={24} />
           <div>
@@ -182,7 +212,7 @@ export default function PlatformAdmin() {
           ))}
         </nav>
         <div className="admin-sidebar-footer">
-          <Link href="/" target="_blank" rel="noopener noreferrer">
+          <Link href="/" target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>
             Ver site público <ArrowUpRight size={16} />
           </Link>
           <button onClick={() => void logout()}>
@@ -193,11 +223,24 @@ export default function PlatformAdmin() {
       </aside>
       <div className="admin-body">
         <header className="admin-topbar">
-          <span>
-            <ShieldCheck size={17} />
-            GeevheitTire{" "}
-            <span className="admin-breadcrumb">/ Administração</span>
-          </span>
+          <div className="admin-topbar-left">
+            <button
+              type="button"
+              className="icon-button admin-menu-trigger"
+              aria-label={menuOpen ? "Fechar menu administrativo" : "Abrir menu administrativo"}
+              aria-expanded={menuOpen}
+              aria-controls="admin-sidebar"
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              <Menu size={20} />
+              {!!data?.operations.open_tickets && <i className="mobile-menu-dot" aria-hidden="true" />}
+            </button>
+            <span>
+              <ShieldCheck size={17} />
+              GeevheitTire{" "}
+              <span className="admin-breadcrumb">/ Administração</span>
+            </span>
+          </div>
           <button
             className="admin-profile-button"
             onClick={() => navigate("profile")}
