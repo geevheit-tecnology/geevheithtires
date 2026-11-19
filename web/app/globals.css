@@ -2534,44 +2534,34 @@ td small {
   border-radius: 12px;
   object-fit: contain;
 }
-.tire-360-telemetry-strip {
+.tire-360-controls {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  padding: 7px 12px;
-  background: rgba(9, 15, 13, 0.78);
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(9, 15, 13, 0.65);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
-.tire-360-telemetry-strip > div {
-  min-width: 0;
-}
-.tire-360-telemetry-strip small,
-.panel .tire-360-telemetry-strip small {
-  display: block;
-  font-size: 9px;
-  line-height: 1.2;
-  letter-spacing: 0.06em;
-  color: #9bb5aa;
-}
-.tire-360-telemetry-strip strong,
-.panel .tire-360-telemetry-strip strong {
-  display: block;
-  font-size: 12px;
-  line-height: 1.25;
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tire-360-controls {
+.tire-360-controls-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  background: rgba(9, 15, 13, 0.55);
+  gap: 10px;
+}
+.tire-360-meta-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  line-height: 1.3;
+  color: #9bb5aa;
+}
+.tire-360-meta-inline b {
+  color: #fff;
+  font-weight: 700;
 }
 .tire-360-control-group {
   display: flex;
@@ -3172,8 +3162,7 @@ td small {
   .tire-visual-card { padding: 14px; gap: 12px; }
   .tire-visual-meta small { font-size: 13px; }
   .tire-visual-foot { font-size: 13px; flex-wrap: wrap; }
-  .tire-360-viewport { height: 265px; }
-  .tire-360-telemetry-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px 10px; }
+  .tire-360-viewport { height: 280px; }
   .tire-dossier-dialog {
     width: 100vw;
     max-width: 100vw;

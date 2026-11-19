@@ -442,98 +442,88 @@ export function TireViewer360AR({
         {arError && <div className="tire-ar-error">{arError}</div>}
       </div>
 
-      <div className="tire-360-telemetry-strip">
-        <div>
-          <small>PNEU</small>
-          <strong>{code}</strong>
-        </div>
-        <div>
-          <small>SULCO</small>
-          <strong>{treadMm.toFixed(1)} mm</strong>
-        </div>
-        <div>
-          <small>PRESSÃO</small>
-          <strong>{pressurePsi ? `${pressurePsi} PSI` : "—"}</strong>
-        </div>
-        <div>
-          <small>VIDA</small>
-          <strong>{retreadCount + 1}ª vida</strong>
-        </div>
-      </div>
-
       <div className="tire-360-controls">
-        <div className="tire-360-control-group">
-          <button
-            type="button"
-            className="hud-icon-btn"
-            aria-label={autoSpin ? "Pausar rotação 360" : "Girar 360"}
-            onClick={() => setAutoSpin((v) => !v)}
-          >
-            {autoSpin ? <Pause size={15} /> : <Play size={15} />}
-          </button>
-          <button
-            type="button"
-            className="hud-icon-btn"
-            aria-label="Aproximar"
-            onClick={() => setZoom((z) => Math.min(1.65, +(z + 0.15).toFixed(2)))}
-          >
-            <ZoomIn size={15} />
-          </button>
-          <button
-            type="button"
-            className="hud-icon-btn"
-            aria-label="Afastar"
-            onClick={() => setZoom((z) => Math.max(0.65, +(z - 0.15).toFixed(2)))}
-          >
-            <ZoomOut size={15} />
-          </button>
-          <button
-            type="button"
-            className="hud-icon-btn"
-            aria-label="Resetar ângulo"
-            onClick={() => {
-              rotRef.current = { x: 0.28, y: 0.45, vx: 0, vy: 0.008 };
-              setZoom(1);
-            }}
-          >
-            <RotateCw size={15} />
-          </button>
-        </div>
-
-        <div className="tire-360-caption">
-          <span>{brand} {model} · {size}</span>
-          <small>Arraste para girar 360°</small>
-        </div>
-
-        {canEdit && onSavePhoto && (
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = "";
-                void handleFileChange(f);
-              }}
-            />
+        <div className="tire-360-controls-row">
+          <div className="tire-360-control-group">
             <button
               type="button"
-              className="button small"
-              disabled={photoBusy || savingPhoto}
-              onClick={() => fileInputRef.current?.click()}
+              className="hud-icon-btn"
+              aria-label={autoSpin ? "Pausar rotação 360" : "Girar 360"}
+              onClick={() => setAutoSpin((v) => !v)}
             >
-              <Camera size={15} />
-              {photoBusy || savingPhoto
-                ? "Otimizando…"
-                : photoData
-                  ? "Atualizar foto"
-                  : "Tirar foto do pneu"}
+              {autoSpin ? <Pause size={15} /> : <Play size={15} />}
+            </button>
+            <button
+              type="button"
+              className="hud-icon-btn"
+              aria-label="Aproximar"
+              onClick={() => setZoom((z) => Math.min(1.65, +(z + 0.15).toFixed(2)))}
+            >
+              <ZoomIn size={15} />
+            </button>
+            <button
+              type="button"
+              className="hud-icon-btn"
+              aria-label="Afastar"
+              onClick={() => setZoom((z) => Math.max(0.65, +(z - 0.15).toFixed(2)))}
+            >
+              <ZoomOut size={15} />
+            </button>
+            <button
+              type="button"
+              className="hud-icon-btn"
+              aria-label="Resetar ângulo"
+              onClick={() => {
+                rotRef.current = { x: 0.28, y: 0.45, vx: 0, vy: 0.008 };
+                setZoom(1);
+              }}
+            >
+              <RotateCw size={15} />
             </button>
           </div>
-        )}
+
+          <div className="tire-360-caption">
+            <span>{brand} {model} · {size}</span>
+            <small>Arraste para girar 360°</small>
+          </div>
+
+          {canEdit && onSavePhoto && (
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  void handleFileChange(f);
+                }}
+              />
+              <button
+                type="button"
+                className="button small"
+                disabled={photoBusy || savingPhoto}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Camera size={15} />
+                {photoBusy || savingPhoto
+                  ? "Otimizando…"
+                  : photoData
+                    ? "Atualizar foto"
+                    : "Tirar foto do pneu"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="tire-360-meta-inline">
+          <span>Pneu <b>{code}</b></span>
+          <span>Sulco <b>{treadMm.toFixed(1)} mm</b></span>
+          <span>Pressão <b>{pressurePsi ? `${pressurePsi} PSI` : "—"}</b></span>
+          <span>Vida <b>{retreadCount + 1}ª</b></span>
+        </div>
       </div>
       {photoMessage && <p className="tire-photo-feedback" role="status">{photoMessage}</p>}
     </div>
