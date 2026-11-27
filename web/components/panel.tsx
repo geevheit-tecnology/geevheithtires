@@ -344,7 +344,10 @@ export default function Panel() {
   const alertLock = useRef(false);
   const [readingAlert, setReadingAlert] = useState(false);
   function openRegistration(form: string) {
-    if (!requireRenewal()) setModal(form);
+    if (!requireRenewal()) {
+      if (form === "tires") setNewTirePhoto(null);
+      setModal(form);
+    }
   }
   async function openMap(v: Vehicle) {
     if (requireRenewal()) return;
@@ -456,6 +459,7 @@ export default function Panel() {
             : "Cadastro salvo.",
       );
       setModal("");
+      setNewTirePhoto(null);
       await load();
       if (map) setMap(await api(`vehicles/${map.vehicle.id}/tire-map`));
     } catch (e) {
@@ -639,7 +643,7 @@ export default function Panel() {
             </div>
           )}
           {user && pending.some(x => x.userId === user.id && x.companyId === user.company_id) && <div className="info" role="status">{pending.filter(x => x.userId === user.id && x.companyId === user.company_id).length} inspeção(ões) aguardando envio neste aparelho. <button type="button" className="table-link" disabled={syncing} onClick={() => void syncPending()}>{syncing ? "Enviando…" : "Enviar agora"}</button></div>}
-          {loaded&&<div className="plan-context"><span className="plan-level">{access.plan_name}</span><span>{access.status==="trial"?"Avaliação com recursos Starter":access.can_write?"Recursos do seu plano":"Acesso para consulta"} · até {access.vehicle_limit} veículos e {access.user_limit} usuários</span><button className="table-link" onClick={()=>setTab("plan")}>Ver benefícios</button></div>}
+          {loaded&&<div className="plan-context"><span className="plan-level">{access.plan_name}</span><span>{access.status==="trial"?`Avaliação (${access.trial_days||14} dias) com recursos ${access.plan_name}`:access.can_write?"Recursos do seu plano":"Acesso para consulta"} · até {access.vehicle_limit} veículos e {access.user_limit} usuários</span><button className="table-link" onClick={()=>setTab("plan")}>Ver benefícios</button></div>}
           {!loaded && !error && <TireLoader />}
           {tab === "dashboard" && (
             <>

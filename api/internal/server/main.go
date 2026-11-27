@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"geevheittire/api/migrations"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/golang-jwt/jwt/v5"
@@ -878,6 +879,60 @@ var (
 	serverlessErr     error
 )
 
+func ensureMigrations(ctx context.Context, dsn string) {
+	if strings.TrimSpace(dsn) == "" {
+		return
+	}
+	migCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	conn, err := pgx.Connect(migCtx, dsn)
+	if err != nil {
+		return
+	}
+	defer conn.Close(migCtx)
+	var locked bool
+	if err = conn.QueryRow(migCtx, "select pg_try_advisory_lock(8246701)").Scan(&locked); err != nil || !locked {
+		return
+	}
+	defer conn.Exec(migCtx, "select pg_advisory_unlock(8246701)")
+	var hasTable bool
+	if err = conn.QueryRow(migCtx, "select to_regclass('public.schema_migrations') is not null").Scan(&hasTable); err != nil || !hasTable {
+		return
+	}
+	entries, err := migrations.Files.ReadDir(".")
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		n := entry.Name()
+		if len(n) < 7 || n[len(n)-7:] != ".up.sql" {
+			continue
+		}
+		var applied bool
+		if err = conn.QueryRow(migCtx, "select exists(select 1 from schema_migrations where version=$1)", n).Scan(&applied); err != nil || applied {
+			continue
+		}
+		sqlBytes, err := migrations.Files.ReadFile(n)
+		if err != nil {
+			continue
+		}
+		tx, err := conn.Begin(migCtx)
+		if err != nil {
+			break
+		}
+		if _, err = tx.Exec(migCtx, string(sqlBytes)); err != nil {
+			_ = tx.Rollback(migCtx)
+			slog.Warn("auto-migration skipped", "version", n, "error", err)
+			break
+		}
+		if _, err = tx.Exec(migCtx, "insert into schema_migrations(version) values($1)", n); err != nil {
+			_ = tx.Rollback(migCtx)
+			break
+		}
+		_ = tx.Commit(migCtx)
+	}
+}
+
 func initServerless() (*App, http.Handler, error) {
 	serverlessOnce.Do(func() {
 		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -889,6 +944,7 @@ func initServerless() (*App, http.Handler, error) {
 		if os.Getenv("DB_MAX_CONNS") == "" {
 			_ = os.Setenv("DB_MAX_CONNS", "5")
 		}
+		ensureMigrations(context.Background(), os.Getenv("DATABASE_URL"))
 		db, e := newPool(context.Background())
 		if e != nil {
 			serverlessErr = e
@@ -922,6 +978,7 @@ func Run() {
 		slog.Error("JWT_SECRET precisa de pelo menos 32 caracteres")
 		os.Exit(1)
 	}
+	ensureMigrations(ctx, os.Getenv("DATABASE_URL"))
 	db, e := newPool(ctx)
 	if e != nil {
 		slog.Error("invalid database configuration")

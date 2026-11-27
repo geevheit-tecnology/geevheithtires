@@ -31,6 +31,48 @@ export type TireViewerProps = {
   onSavePhoto?: (photoData: string, photoThumb: string) => Promise<void>;
 };
 
+function createProceduralSidewallTexture(
+  photoImg: HTMLImageElement | null,
+  code: string,
+  brand: string,
+  model: string,
+  size: string,
+  treadMm: number,
+): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+
+  if (photoImg) {
+    ctx.drawImage(photoImg, 0, 0, 512, 512);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  ctx.fillStyle = "#222826";
+  ctx.fillRect(0, 0, 512, 512);
+  ctx.strokeStyle = "rgba(210, 223, 213, 0.22)";
+  ctx.lineWidth = 3;
+  for (let r = 80; r <= 230; r += 38) {
+    ctx.beginPath();
+    ctx.arc(256, 256, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "rgba(210, 223, 213, 0.35)";
+  ctx.font = "bold 22px Arial, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(`${brand} ${model}`.trim() || code, 256, 110);
+  ctx.fillText(`${size} • ${treadMm.toFixed(1)}mm`, 256, 415);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 function createProceduralTreadTexture(
   photoImg: HTMLImageElement | null,
   code: string,
@@ -44,7 +86,11 @@ function createProceduralTreadTexture(
   if (photoImg) {
     ctx.drawImage(photoImg, 0, 0, 512, 512);
     const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.repeat.set(2, 1);
     texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
     return texture;
   }
   ctx.fillStyle = "#1b2220";
@@ -80,6 +126,7 @@ function createProceduralTreadTexture(
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(3, 1);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
   return tex;
 }
 
@@ -105,11 +152,20 @@ export function TireViewer360AR({
   const [zoom, setZoom] = useState(1);
   const [arMode, setArMode] = useState(false);
   const [arError, setArError] = useState("");
-  const [viewMode, setViewMode] = useState<"3d" | "photo">(photoData ? "photo" : "3d");
+  const [localPhoto, setLocalPhoto] = useState<string | null | undefined>(photoData);
+  const activePhoto = localPhoto !== undefined ? localPhoto : photoData;
+  const [viewMode, setViewMode] = useState<"3d" | "photo">(activePhoto ? "photo" : "3d");
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoMessage, setPhotoMessage] = useState("");
   const [photoError, setPhotoError] = useState(false);
   const photoLock = useRef(false);
+
+  useEffect(() => {
+    setLocalPhoto(photoData);
+    if (photoData && !arMode) {
+      setViewMode("photo");
+    }
+  }, [photoData, code]);
 
   const rotRef = useRef({ x: 0.28, y: 0.45, vx: 0, vy: 0.008 });
   const autoSpinRef = useRef(autoSpin);
@@ -184,15 +240,33 @@ export function TireViewer360AR({
     tireGroup.add(tireMesh);
 
     // Outer tread band (cylinder) for crisp photo/tread mapping
-    const treadGeo = new THREE.CylinderGeometry(1.32, 1.32, 0.56, 64, 1, true);
+    const treadGeo = new THREE.CylinderGeometry(1.33, 1.33, 0.56, 64, 1, true);
     treadGeo.rotateX(Math.PI / 2);
     const treadMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      roughness: 0.82,
+      roughness: 0.78,
       metalness: 0.05,
+      side: THREE.DoubleSide,
     });
     const treadMesh = new THREE.Mesh(treadGeo, treadMat);
     tireGroup.add(treadMesh);
+
+    // Sidewall / photo discs so 3D and AR show the real tire photo on front/back faces too
+    const sideGeo = new THREE.CircleGeometry(1.31, 64);
+    const sideMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.72,
+      metalness: 0.06,
+      side: THREE.DoubleSide,
+    });
+    const frontSideMesh = new THREE.Mesh(sideGeo, sideMat);
+    frontSideMesh.position.z = 0.36;
+    tireGroup.add(frontSideMesh);
+
+    const backSideMesh = new THREE.Mesh(sideGeo, sideMat);
+    backSideMesh.position.z = -0.36;
+    backSideMesh.rotation.y = Math.PI;
+    tireGroup.add(backSideMesh);
 
     // Steel/alloy rim
     const rimGeo = new THREE.CylinderGeometry(0.64, 0.64, 0.5, 48);
@@ -216,6 +290,7 @@ export function TireViewer360AR({
     const hubMesh = new THREE.Mesh(hubGeo, hubMat);
     tireGroup.add(hubMesh);
 
+    const nutMats: THREE.Mesh[] = [];
     const nutGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.56, 12);
     nutGeo.rotateX(Math.PI / 2);
     const nutMat = new THREE.MeshStandardMaterial({
@@ -228,25 +303,42 @@ export function TireViewer360AR({
       const nut = new THREE.Mesh(nutGeo, nutMat);
       nut.position.set(Math.cos(angle) * 0.44, Math.sin(angle) * 0.44, 0);
       tireGroup.add(nut);
+      nutMats.push(nut);
     }
 
     // Load tire photo onto 3D tread & sidewall if available
     let disposed = false;
     let activeTex: THREE.Texture | null = null;
+    let activeSideTex: THREE.Texture | null = null;
     const applyTexture = (img: HTMLImageElement | null) => {
       if (disposed) return;
+      const hasImg = !!img;
+      // Hide procedural metallic wheel center when displaying a real tire photo so the entire photo is visible in 3D/AR
+      rimMesh.visible = !hasImg;
+      hubMesh.visible = !hasImg;
+      nutMats.forEach((n) => {
+        n.visible = !hasImg;
+      });
       const tex = createProceduralTreadTexture(img, code, treadMm);
+      const sideTex = createProceduralSidewallTexture(img, code, brand, model, size, treadMm);
       activeTex?.dispose();
+      activeSideTex?.dispose();
       activeTex = tex;
+      activeSideTex = sideTex;
       treadMat.map = tex;
       treadMat.needsUpdate = true;
+      sideMat.map = sideTex;
+      sideMat.needsUpdate = true;
+      rubberMat.color.setHex(hasImg ? 0xffffff : 0x222826);
+      rubberMat.map = sideTex;
+      rubberMat.needsUpdate = true;
     };
 
-    if (photoData) {
+    if (activePhoto) {
       const img = new Image();
       img.onload = () => applyTexture(img);
       img.onerror = () => applyTexture(null);
-      img.src = photoData;
+      img.src = activePhoto;
     } else {
       applyTexture(null);
     }
@@ -287,19 +379,22 @@ export function TireViewer360AR({
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
       activeTex?.dispose();
+      activeSideTex?.dispose();
       tireGeo.dispose();
       treadGeo.dispose();
+      sideGeo.dispose();
       rimGeo.dispose();
       hubGeo.dispose();
       nutGeo.dispose();
       rubberMat.dispose();
       treadMat.dispose();
+      sideMat.dispose();
       rimMat.dispose();
       hubMat.dispose();
       nutMat.dispose();
       renderer.dispose();
     };
-  }, [photoData, code, treadMm, viewMode, arMode]);
+  }, [activePhoto, code, brand, model, size, treadMm, viewMode, arMode]);
 
   // Camera AR stream lifecycle
   useEffect(() => {
@@ -351,8 +446,10 @@ export function TireViewer360AR({
     try {
       const optimized = await optimizeTirePhoto(file);
       await onSavePhoto(optimized.photoData, optimized.photoThumb);
-      setArMode(false);
-      setViewMode("photo");
+      setLocalPhoto(optimized.photoData);
+      if (!arMode) {
+        setViewMode("photo");
+      }
       setPhotoMessage(`Foto otimizada (${optimized.sizeKB} KB) salva com segurança!`);
     } catch (e) {
       setPhotoError(true);
@@ -381,7 +478,7 @@ export function TireViewer360AR({
     draggingRef.current.active = false;
   };
 
-  const showingPhoto = viewMode === "photo" && !!photoData && !arMode;
+  const showingPhoto = viewMode === "photo" && !!activePhoto;
 
   return (
     <div className={arMode ? "tire-360-shell ar-active" : "tire-360-shell"}>
@@ -396,7 +493,7 @@ export function TireViewer360AR({
           </span>
         </div>
         <div className="tire-360-mode-switch">
-          {photoData && !arMode && (
+          {activePhoto && (
             <button
               type="button"
               className={viewMode === "3d" ? "hud-btn active" : "hud-btn"}
@@ -411,7 +508,6 @@ export function TireViewer360AR({
             className={arMode ? "hud-btn ar-on" : "hud-btn"}
             onClick={() => {
               setArMode(!arMode);
-              setViewMode("3d");
             }}
           >
             {arMode ? <X size={14} /> : <Camera size={14} />}
@@ -438,8 +534,31 @@ export function TireViewer360AR({
           />
         )}
         {showingPhoto ? (
-          <div className="tire-photo-preview-wrap">
-            <img src={photoData} alt={`Foto do pneu ${code}`} className="tire-photo-preview" />
+          <div
+            className="tire-photo-preview-wrap"
+            style={
+              arMode
+                ? {
+                    position: "relative",
+                    zIndex: 2,
+                    background: "transparent",
+                  }
+                : undefined
+            }
+          >
+            <img
+              src={activePhoto || ""}
+              alt={`Foto do pneu ${code}`}
+              className="tire-photo-preview"
+              style={
+                arMode
+                  ? {
+                      transform: `perspective(700px) rotateX(${(-rotRef.current.x * 28).toFixed(1)}deg) rotateY(${(rotRef.current.y * 28).toFixed(1)}deg) scale(${zoom})`,
+                      boxShadow: "0 18px 40px rgba(0,0,0,0.55)",
+                    }
+                  : undefined
+              }
+            />
           </div>
         ) : (
           <div ref={stageRef} className="tire-360-canvas" aria-label={`Visualizador 360 graus do pneu ${code}`} />
@@ -516,7 +635,7 @@ export function TireViewer360AR({
                 <Camera size={15} />
                 {photoBusy || savingPhoto
                   ? "Otimizando…"
-                  : photoData
+                  : activePhoto
                     ? "Atualizar foto"
                     : "Tirar foto do pneu"}
               </button>

@@ -11,6 +11,7 @@ export type Plan = {
   price_cents: number;
   vehicle_limit: number;
   user_limit: number;
+  trial_days?: number;
   published: boolean;
 };
 
@@ -359,7 +360,7 @@ Pix Copia e Cola: ${charge.pix_payload}`;
               return (
                 <article
                   className={`surface commercial-plan ${access.plan_id === p.id ? "current-plan" : ""}`}
-                  key={p.id}
+                  key={`${p.id}-${offer?.price_cents ?? 0}-${offer?.vehicle_limit ?? 0}-${offer?.user_limit ?? 0}`}
                 >
                   <span className="plan-level">
                     {access.plan_id === p.id ? "SEU PLANO" : displayName}

@@ -255,6 +255,8 @@ export default function TireInventory({
         tire: {
           ...previous.tire,
           ...updated,
+          photo_data: updated.photo_data !== undefined ? updated.photo_data : previous.tire.photo_data,
+          photo_thumb: updated.photo_thumb !== undefined ? updated.photo_thumb : previous.tire.photo_thumb,
           version: updated.version ?? previous.tire.version,
           stock_location:
             updated.stock_location ?? previous.tire.stock_location,

@@ -44,6 +44,7 @@ export default function PlatformClients({ plans, onChange, pendingOnly }: {
   const dialog = useRef<HTMLDialogElement>(null);
   const paymentForm = useRef<HTMLFormElement>(null);
   const planName = (id: string | null) => plans.find(p => p.id === id)?.name || id || "Avaliação Starter";
+  const defaultTrialDays = plans.find(p => p.id === "starter")?.trial_days || 14;
 
   async function load(q = query, append = false) {
     const out = await api(`platform/clients?${q}${append ? `&before=${next}` : ""}`);
@@ -119,11 +120,21 @@ export default function PlatformClients({ plans, onChange, pendingOnly }: {
 
   function change(id: string, operation: string) {
     if (lock.current) return;
+    let days = defaultTrialDays;
+    if (operation === "trial") {
+      const rawDays = window.prompt("Quantos dias de teste gratuito deseja conceder / prorrogar? (1 a 365):", String(defaultTrialDays));
+      if (!rawDays) return;
+      days = Number(rawDays);
+      if (!Number.isInteger(days) || days < 1 || days > 365) {
+        setError("Informe uma quantidade válida de dias entre 1 e 365.");
+        return;
+      }
+    }
     const reason = window.prompt("Justificativa desta alteração (mínimo 5 caracteres):");
     if (!reason) return;
     void run(async () => {
-      await api("platform/change", { target: id, operation, reason, payload: operation === "trial" ? { days: 14 } : {} });
-      setNotice("Alteração registrada na auditoria.");
+      await api("platform/change", { target: id, operation, reason, payload: operation === "trial" ? { days } : {} });
+      setNotice(operation === "trial" ? `Período de avaliação prorrogado em ${days} dia(s).` : "Alteração registrada na auditoria.");
       await load();
       await onChange();
     });
@@ -200,7 +211,7 @@ export default function PlatformClients({ plans, onChange, pendingOnly }: {
                 <button className="table-link" disabled={busy} onClick={() => change(client.id, client.status === "suspended" ? "restore" : "suspend")}>
                   {client.status === "suspended" ? "Restaurar" : "Suspender"}
                 </button>
-                <button className="table-link" disabled={busy} onClick={() => change(client.id, "trial")}>Prorrogar 14 dias</button>
+                <button className="table-link" disabled={busy} onClick={() => change(client.id, "trial")}>Prorrogar {defaultTrialDays} dias</button>
               </>}
             </div></td>
           </tr>)}</tbody>

@@ -239,7 +239,12 @@ func insertCompany(ctx context.Context, t pgx.Tx, companyID, name, cnpj string, 
 	if e != nil {
 		return e
 	}
-	_, e = t.Exec(ctx, "insert into companies(id,name,cnpj,legal_name,cnpj_registration_status,cnpj_verified_at,cnpj_verification_source,address) values($1,$2,$3,$4,$5,$6,$7,$8)", companyID, strings.TrimSpace(name), cnpj, registration.LegalName, registration.StatusCode, registration.CheckedAt, registration.Source, data)
+	trialDays := 14
+	_ = t.QueryRow(ctx, "select coalesce((to_jsonb(bp)->>'trial_days')::integer,14) from billing_plans bp where bp.id='starter'").Scan(&trialDays)
+	if trialDays < 1 || trialDays > 365 {
+		trialDays = 14
+	}
+	_, e = t.Exec(ctx, "insert into companies(id,name,cnpj,legal_name,cnpj_registration_status,cnpj_verified_at,cnpj_verification_source,address,trial_ends_at) values($1,$2,$3,$4,$5,$6,$7,$8,now()+make_interval(days=>$9))", companyID, strings.TrimSpace(name), cnpj, registration.LegalName, registration.StatusCode, registration.CheckedAt, registration.Source, data, trialDays)
 	return e
 }
 func (a *App) companyProfile(w http.ResponseWriter, r *http.Request) {

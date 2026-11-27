@@ -99,6 +99,7 @@ func (a *App) platformConfigurePlan(w http.ResponseWriter, r *http.Request) {
 		Price       int    `json:"price_cents"`
 		Vehicles    int    `json:"vehicle_limit"`
 		Users       int    `json:"user_limit"`
+		TrialDays   *int   `json:"trial_days"`
 		Published   bool   `json:"published"`
 		ApplyLimits bool   `json:"apply_limits"`
 		Reason      string `json:"reason"`
@@ -112,15 +113,29 @@ func (a *App) platformConfigurePlan(w http.ResponseWriter, r *http.Request) {
 		problem(w, 422, "Informe um nome de plano entre 2 e 60 caracteres.")
 		return
 	}
-	if d.Version < 1 || !validReason(d.Reason) || d.Price < 0 || d.Price > 100000000 || d.Vehicles < 1 || d.Vehicles > 100000 || d.Users < 1 || d.Users > 10000 || (d.Published && d.Price == 0) {
-		problem(w, 422, "Informe limites válidos e justificativa. Para publicar, defina um valor maior que zero.")
+	trialDays := 14
+	if d.TrialDays != nil {
+		trialDays = *d.TrialDays
+	}
+	if d.Version < 1 || !validReason(d.Reason) || d.Price < 0 || d.Price > 100000000 || d.Vehicles < 1 || d.Vehicles > 100000 || d.Users < 1 || d.Users > 10000 || trialDays < 1 || trialDays > 365 || (d.Published && d.Price == 0) {
+		problem(w, 422, "Informe limites válidos, dias de teste (1 a 365) e justificativa. Para publicar, defina um valor maior que zero.")
 		return
 	}
 	var result json.RawMessage
-	e := a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason, d.Name).Scan(&result)
+	e := a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason, d.Name, trialDays).Scan(&result)
 	if e != nil {
-		managementError(w, e)
-		return
+		var p *pgconn.PgError
+		if errors.As(e, &p) && p.Code == "42883" {
+			// Fallback if 11-arg or 10-arg function is not yet installed in DB
+			e = a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason, d.Name).Scan(&result)
+			if e != nil && errors.As(e, &p) && p.Code == "42883" {
+				e = a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason).Scan(&result)
+			}
+		}
+		if e != nil {
+			managementError(w, e)
+			return
+		}
 	}
 	write(w, 200, result)
 }
@@ -177,27 +192,37 @@ func (a *App) platformCloseClient(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, map[string]bool{"ok": true})
 }
 func (a *App) publicPlans(w http.ResponseWriter, r *http.Request) {
-	rows, e := a.db.Query(r.Context(), "select id,name,vehicle_limit,user_limit,price_cents from billing_plans where published")
+	rows, e := a.db.Query(r.Context(), "select id,name,vehicle_limit,user_limit,price_cents,coalesce((to_jsonb(billing_plans)->>'trial_days')::integer,14),published from billing_plans")
 	if e != nil {
 		problem(w, 503, "Não foi possível consultar os planos.")
 		return
 	}
 	defer rows.Close()
 	type planOffer struct {
-		name     string
-		vehicles int
-		users    int
-		price    int
+		name      string
+		vehicles  int
+		users     int
+		price     int
+		trialDays int
+		published bool
 	}
 	offers := map[string]planOffer{}
+	trialDays := 14
 	for rows.Next() {
 		var id, name string
-		var vehicles, users, price int
-		if e = rows.Scan(&id, &name, &vehicles, &users, &price); e != nil {
+		var vehicles, users, price, tDays int
+		var published bool
+		if e = rows.Scan(&id, &name, &vehicles, &users, &price, &tDays, &published); e != nil {
 			problem(w, 503, "Não foi possível consultar os planos.")
 			return
 		}
-		offers[id] = planOffer{name: strings.TrimSpace(name), vehicles: vehicles, users: users, price: price}
+		if tDays < 1 {
+			tDays = 14
+		}
+		if id == "starter" {
+			trialDays = tDays
+		}
+		offers[id] = planOffer{name: strings.TrimSpace(name), vehicles: vehicles, users: users, price: price, trialDays: tDays, published: published}
 	}
 	if rows.Err() != nil {
 		problem(w, 503, "Não foi possível consultar os planos.")
@@ -209,15 +234,19 @@ func (a *App) publicPlans(w http.ResponseWriter, r *http.Request) {
 		var item map[string]any
 		_ = json.Unmarshal(raw, &item)
 		item["display_price_cents"] = 0
+		item["trial_days"] = trialDays
 		if offer, ok := offers[p.ID]; ok {
+			item["trial_days"] = offer.trialDays
 			if offer.name != "" {
 				item["name"] = offer.name
 			}
 			item["vehicle_limit"] = offer.vehicles
 			item["user_limit"] = offer.users
-			item["display_price_cents"] = offer.price
+			if offer.published {
+				item["display_price_cents"] = offer.price
+			}
 		}
 		out = append(out, item)
 	}
-	write(w, 200, map[string]any{"plans": out})
+	write(w, 200, map[string]any{"plans": out, "trial_days": trialDays})
 }

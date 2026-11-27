@@ -17,6 +17,7 @@ type entitlements struct {
 	CanWrite     bool            `json:"can_write"`
 	VehicleLimit int             `json:"vehicle_limit"`
 	UserLimit    int             `json:"user_limit"`
+	TrialDays    int             `json:"trial_days"`
 	Features     map[string]bool `json:"features"`
 }
 
@@ -25,7 +26,7 @@ func (a *App) resolveEntitlements(r *http.Request) (entitlements, error) {
 	if cached, ok := r.Context().Value(entitlementKey{}).(entitlements); ok {
 		return cached, nil
 	}
-	out := entitlements{PlanID: "starter", PlanName: "Starter", VehicleLimit: 15, UserLimit: 3}
+	out := entitlements{PlanID: "starter", PlanName: "Starter", VehicleLimit: 15, UserLimit: 3, TrialDays: 14}
 	t, e := a.tx(r)
 	if e != nil {
 		return out, e
@@ -33,10 +34,19 @@ func (a *App) resolveEntitlements(r *http.Request) (entitlements, error) {
 	defer t.Rollback(r.Context())
 	var paid, trial, suspended bool
 	var plan, dbPlanName string
-	var vehicles, users int
-	e = t.QueryRow(r.Context(), `select coalesce(s.plan_id,''),coalesce(bp.name,''),coalesce(s.paid_until>now(),false),c.trial_ends_at>now(),s.suspended,s.vehicle_limit,s.user_limit from companies c join subscriptions s on s.company_id=c.id left join billing_plans bp on bp.id=coalesce(nullif(s.plan_id,''),'starter') where c.id=$1 and c.deleted_at is null`, claims(r).Company).Scan(&plan, &dbPlanName, &paid, &trial, &suspended, &vehicles, &users)
+	var vehicles, users, starterVehicles, starterUsers, starterTrialDays int
+	e = t.QueryRow(r.Context(), `select coalesce(s.plan_id,''),coalesce(bp.name,''),coalesce(s.paid_until>now(),false),c.trial_ends_at>now(),s.suspended,s.vehicle_limit,s.user_limit,coalesce(sp.vehicle_limit,15),coalesce(sp.user_limit,3),coalesce((to_jsonb(sp)->>'trial_days')::integer,14) from companies c join subscriptions s on s.company_id=c.id left join billing_plans bp on bp.id=coalesce(nullif(s.plan_id,''),'starter') left join billing_plans sp on sp.id='starter' where c.id=$1 and c.deleted_at is null`, claims(r).Company).Scan(&plan, &dbPlanName, &paid, &trial, &suspended, &vehicles, &users, &starterVehicles, &starterUsers, &starterTrialDays)
 	if e != nil {
 		return out, e
+	}
+	if starterVehicles > 0 {
+		out.VehicleLimit = starterVehicles
+	}
+	if starterUsers > 0 {
+		out.UserLimit = starterUsers
+	}
+	if starterTrialDays > 0 {
+		out.TrialDays = starterTrialDays
 	}
 	if strings.TrimSpace(dbPlanName) != "" {
 		out.PlanName = strings.TrimSpace(dbPlanName)

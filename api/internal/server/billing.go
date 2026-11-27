@@ -127,7 +127,8 @@ func (a *App) billingStatus(w http.ResponseWriter, r *http.Request) {
 	var raw []byte
 	e = t.QueryRow(r.Context(), `select jsonb_build_object('trial_ends_at',c.trial_ends_at,'paid_until',s.paid_until,'plan_id',s.plan_id,'suspended',s.suspended,
  'status',case when s.suspended then 'suspended' when s.paid_until>now() then 'active' when c.trial_ends_at>now() then 'trial' else 'expired' end,
- 'vehicle_limit',case when s.paid_until>now() then s.vehicle_limit else 15 end,'user_limit',case when s.paid_until>now() then s.user_limit else 3 end,
+ 'vehicle_limit',case when s.paid_until>now() then s.vehicle_limit else coalesce((select vehicle_limit from billing_plans where id='starter'),15) end,'user_limit',case when s.paid_until>now() then s.user_limit else coalesce((select user_limit from billing_plans where id='starter'),3) end,
+ 'trial_days',coalesce((select (to_jsonb(bp)->>'trial_days')::integer from billing_plans bp where bp.id='starter'),14),
  'vehicles',(select count(*) from vehicles where company_id=c.id and deleted_at is null),'users',(select count(*) from users where company_id=c.id and deleted_at is null),
  'plans',coalesce((select jsonb_agg(to_jsonb(p) order by price_cents) from billing_plans p where published),'[]'),
  'invoices',coalesce((select jsonb_agg(to_jsonb(x)) from (select b.id,plan_id,price_cents,status,checkout_url,due_date,paid_at,environment,source,reference,

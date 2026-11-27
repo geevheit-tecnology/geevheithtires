@@ -1,5 +1,5 @@
 "use client";
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ShieldCheck } from "lucide-react";
@@ -20,6 +20,26 @@ export function AuthForm({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [completingCompany, setCompletingCompany] = useState(false);
+  const [trialDays, setTrialDays] = useState(14);
+  useEffect(() => {
+    if (mode !== "register") return;
+    let active = true;
+    fetch("/api/backend/plans", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((out) => {
+        if (!active || !out) return;
+        const t = Number(
+          out.trial_days ||
+            out.plans?.find((p: { id: string; trial_days?: number }) => p.id === "starter")?.trial_days ||
+            14,
+        );
+        if (t >= 1) setTrialDays(t);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [mode]);
   const companyDetails = mode === "register" || completingCompany;
   const verify = mode === "accept" && params.get("kind") === "verify";
   const title =
@@ -167,7 +187,7 @@ export function AuthForm({
             {completingCompany
               ? "Seu acesso já está criado. Preencha os dados da empresa para começar."
               : mode === "register"
-              ? "Comece seu período de avaliação de 14 dias, sem cartão."
+              ? `Comece seu período de avaliação de ${trialDays} dias, sem cartão.`
               : "Use seu acesso à plataforma."}
           </p>
           {message ? (

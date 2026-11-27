@@ -41,8 +41,9 @@ const demo: Tire[] = positions.map((position, i) => ({
   status: i === 4 ? "critico" : i === 7 ? "alerta" : "ok",
 }));
 export default function Home() {
-  const [offers,setOffers]=useState<(typeof planCatalog[number]&{display_price_cents?:number})[]>(planCatalog);
-  useEffect(()=>{let active=true;const refresh=()=>{if(document.visibilityState!=="visible")return;fetch("/api/backend/plans",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(out=>{if(active&&Array.isArray(out?.plans))setOffers(out.plans)}).catch(()=>{})};refresh();const timer=setInterval(refresh,15000);window.addEventListener("focus",refresh);return()=>{active=false;clearInterval(timer);window.removeEventListener("focus",refresh)}},[]);
+  const [offers,setOffers]=useState<(typeof planCatalog[number]&{display_price_cents?:number;trial_days?:number})[]>(planCatalog);
+  const [trialDays,setTrialDays]=useState(14);
+  useEffect(()=>{let active=true;const refresh=()=>{if(document.visibilityState!=="visible")return;fetch("/api/backend/plans",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(out=>{if(active&&Array.isArray(out?.plans)){setOffers(out.plans);const t=Number(out.trial_days||out.plans.find((p:{id:string;trial_days?:number})=>p.id==="starter")?.trial_days||14);if(t>=1)setTrialDays(t)}}).catch(()=>{})};refresh();const timer=setInterval(refresh,15000);window.addEventListener("focus",refresh);return()=>{active=false;clearInterval(timer);window.removeEventListener("focus",refresh)}},[]);
   const landingRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -165,7 +166,7 @@ export default function Home() {
               </p>
               <div className="hero-buttons">
                 <Link href="/cadastro" className="button">
-                  Começar teste de 14 dias <ArrowUpRight size={19} />
+                  Começar teste de {trialDays} dias <ArrowUpRight size={19} />
                 </Link>
                 <a className="text-link" href="#plataforma">
                   Conhecer a plataforma <ChevronRight size={17} />
@@ -419,7 +420,7 @@ export default function Home() {
               </article>
             ))}
           </div>
-          <p className="pricing-note caption">O cadastro inicia uma avaliação de 14 dias com os recursos Starter. Consulte a administração para contratar os demais planos.</p>
+          <p className="pricing-note caption">O cadastro inicia uma avaliação de {trialDays} dias com os recursos {offers.find(p=>p.id==="starter")?.name||"Starter"}. Consulte a administração para contratar os demais planos.</p>
         </section>
         <section className="section faq container">
           <div>
@@ -433,7 +434,7 @@ export default function Home() {
             {[
               [
                 "Preciso cadastrar cartão para começar?",
-                "Não. O cadastro inicia um período de avaliação de 14 dias. A contratação e a cobrança serão disponibilizadas na etapa comercial.",
+                `Não. O cadastro inicia um período de avaliação de ${trialDays} dias. A contratação e a cobrança serão disponibilizadas na etapa comercial.`,
               ],
               [
                 "Minha equipe usa a mesma conta da empresa?",

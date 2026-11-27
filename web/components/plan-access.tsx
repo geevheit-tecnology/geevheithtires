@@ -1,8 +1,8 @@
 "use client";
 import {createContext, useContext, ReactNode} from "react";
 import {featureCatalog} from "../lib/plan-catalog";
-export type PlanAccess={plan_id:string;plan_name:string;status:string;can_write:boolean;vehicle_limit:number;user_limit:number;features:Record<string,boolean>};
-export const lockedAccess:PlanAccess={plan_id:"starter",plan_name:"Starter",status:"loading",can_write:false,vehicle_limit:15,user_limit:3,features:{}};
+export type PlanAccess={plan_id:string;plan_name:string;status:string;can_write:boolean;vehicle_limit:number;user_limit:number;trial_days?:number;features:Record<string,boolean>};
+export const lockedAccess:PlanAccess={plan_id:"starter",plan_name:"Starter",status:"loading",can_write:false,vehicle_limit:15,user_limit:3,trial_days:14,features:{}};
 const PlanContext=createContext({access:lockedAccess,viewPlans:()=>{},refresh:async()=>{}});
 export function PlanAccessProvider({access,viewPlans,refresh,children}:{access:PlanAccess;viewPlans:()=>void;refresh:()=>Promise<void>;children:ReactNode}) {
  return <PlanContext.Provider value={{access,viewPlans,refresh}}>{children}</PlanContext.Provider>;

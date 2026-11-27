@@ -23,23 +23,29 @@ export function AdminPlans({
     setNotice("");
     try {
       const nextName = String(f.get("name") || "").trim();
+      const rawPrice = String(f.get("price") || "0").replace(",", ".");
+      const nextPriceCents = Math.round(Number(rawPrice) * 100);
+      const nextTrialDays = Number(f.get("trial_days") || p.trial_days || 14);
+      const isPublished = f.get("published") === "on";
       const out = await api(
         `platform/plans/${p.id}`,
         {
           expected_version: p.version,
           name: nextName,
-          price_cents: Math.round(Number(f.get("price")) * 100),
+          price_cents: nextPriceCents,
           vehicle_limit: Number(f.get("vehicle_limit")),
           user_limit: Number(f.get("user_limit")),
-          published: f.get("published") === "on",
+          trial_days: nextTrialDays,
+          published: isPublished,
           apply_limits: f.get("apply_limits") === "on",
           reason: f.get("reason"),
         },
         "PUT",
       );
       const savedName = out.name || nextName || p.name;
+      const savedTrial = out.trial_days || nextTrialDays;
       setNotice(
-        `Plano ${savedName} salvo. ${f.get("published") === "on" ? "Nome, preço e limites publicados na plataforma." : "Condições mantidas em rascunho."}${out.clients_updated ? ` Limites atualizados em ${out.clients_updated} cliente(s).` : " Mensalidades existentes preservadas."}`,
+        `Plano ${savedName} salvo (${savedTrial} dias de teste gratuito). ${isPublished ? "Nome, preço, tempo de teste e limites publicados na plataforma." : "ATENÇÃO: Plano salvo em rascunho. Marque 'Publicar preço e limites na plataforma' para exibir o novo valor no site e para os clientes."}${out.clients_updated ? ` Limites atualizados em ${out.clients_updated} cliente(s).` : " Mensalidades existentes preservadas."}`,
       );
       await onChange();
     } catch (e) {
@@ -74,7 +80,7 @@ export function AdminPlans({
           return (
             <article
               className="surface admin-plan-card"
-              key={`${p.id}-${p.version}`}
+              key={`${p.id}-${p.version}-${p.price_cents}-${p.trial_days ?? 14}-${p.published}`}
             >
               <div className="admin-plan-heading">
                 <span className="label">
@@ -86,7 +92,7 @@ export function AdminPlans({
                 <span
                   className={`admin-status ${p.published ? "positive" : "neutral"}`}
                 >
-                  {p.published ? "Publicado no site" : "Em rascunho"}
+                  {p.published ? "Publicado no site" : "Em rascunho (oculta valor novo no site)"}
                 </span>
                 <p>{spec?.summary}</p>
               </div>
@@ -103,18 +109,39 @@ export function AdminPlans({
                       required
                     />
                   </label>
-                  <label>
-                    Valor mensal de {p.name} (R$)
-                    <input
-                      type="number"
-                      name="price"
-                      step="0.01"
-                      min="0"
-                      max="1000000"
-                      defaultValue={p.price_cents / 100}
-                      required
-                    />
-                  </label>
+                  <div className="form-grid">
+                    <label>
+                      Valor mensal de {p.name} (R$)
+                      <input
+                        type="number"
+                        name="price"
+                        step="0.01"
+                        min="0"
+                        max="1000000"
+                        defaultValue={p.price_cents / 100}
+                        onInput={(ev) => {
+                          const val = Number((ev.currentTarget as HTMLInputElement).value);
+                          const form = ev.currentTarget.form;
+                          const pub = form?.elements.namedItem("published") as HTMLInputElement | null;
+                          if (pub && val > 0 && !p.published) {
+                            pub.checked = true;
+                          }
+                        }}
+                        required
+                      />
+                    </label>
+                    <label>
+                      Tempo de teste grátis (dias)
+                      <input
+                        type="number"
+                        name="trial_days"
+                        min="1"
+                        max="365"
+                        defaultValue={p.trial_days ?? 14}
+                        required
+                      />
+                    </label>
+                  </div>
                   <div className="form-grid">
                     <label>
                       Veículos de {p.name}
