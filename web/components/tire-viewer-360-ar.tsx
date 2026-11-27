@@ -43,15 +43,15 @@ function createProceduralTreadTexture(
 
   if (photoImg) {
     ctx.drawImage(photoImg, 0, 0, 512, 512);
-    ctx.fillStyle = "rgba(18, 26, 24, 0.22)";
-    ctx.fillRect(0, 0, 512, 512);
-  } else {
-    ctx.fillStyle = "#1b2220";
-    ctx.fillRect(0, 0, 512, 512);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
   }
+  ctx.fillStyle = "#1b2220";
+  ctx.fillRect(0, 0, 512, 512);
 
   // Realistic tread grooves & shoulder sipes
-  ctx.strokeStyle = photoImg ? "rgba(12, 16, 15, 0.55)" : "#0d1211";
+  ctx.strokeStyle = "#0d1211";
   ctx.lineWidth = 8;
   for (let y = 16; y < 512; y += 32) {
     ctx.beginPath();
@@ -105,9 +105,11 @@ export function TireViewer360AR({
   const [zoom, setZoom] = useState(1);
   const [arMode, setArMode] = useState(false);
   const [arError, setArError] = useState("");
-  const [viewMode, setViewMode] = useState<"3d" | "photo">("3d");
+  const [viewMode, setViewMode] = useState<"3d" | "photo">(photoData ? "photo" : "3d");
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoMessage, setPhotoMessage] = useState("");
+  const [photoError, setPhotoError] = useState(false);
+  const photoLock = useRef(false);
 
   const rotRef = useRef({ x: 0.28, y: 0.45, vx: 0, vy: 0.008 });
   const autoSpinRef = useRef(autoSpin);
@@ -238,10 +240,6 @@ export function TireViewer360AR({
       activeTex = tex;
       treadMat.map = tex;
       treadMat.needsUpdate = true;
-      if (img) {
-        rubberMat.map = tex;
-        rubberMat.needsUpdate = true;
-      }
     };
 
     if (photoData) {
@@ -345,16 +343,22 @@ export function TireViewer360AR({
   }, [arMode]);
 
   async function handleFileChange(file: File | undefined) {
-    if (!file || !onSavePhoto) return;
+    if (!file || !onSavePhoto || photoLock.current || savingPhoto) return;
+    photoLock.current = true;
+    setPhotoError(false);
     setPhotoBusy(true);
     setPhotoMessage("");
     try {
       const optimized = await optimizeTirePhoto(file);
       await onSavePhoto(optimized.photoData, optimized.photoThumb);
+      setArMode(false);
+      setViewMode("photo");
       setPhotoMessage(`Foto otimizada (${optimized.sizeKB} KB) salva com segurança!`);
     } catch (e) {
+      setPhotoError(true);
       setPhotoMessage((e as Error).message || "Falha ao otimizar foto.");
     } finally {
+      photoLock.current = false;
       setPhotoBusy(false);
     }
   }
@@ -377,13 +381,15 @@ export function TireViewer360AR({
     draggingRef.current.active = false;
   };
 
+  const showingPhoto = viewMode === "photo" && !!photoData && !arMode;
+
   return (
     <div className={arMode ? "tire-360-shell ar-active" : "tire-360-shell"}>
       <div className="tire-360-hud-top">
         <div className="tire-360-badges">
           <span className="hud-badge">
             <Sparkles size={13} />
-            {arMode ? "REALIDADE AUMENTADA" : "VISÃO 360° INTERATIVA"}
+            {arMode ? "REALIDADE AUMENTADA" : showingPhoto ? "FOTO DO PNEU" : "VISÃO 360° INTERATIVA"}
           </span>
           <span className={`hud-status ${status}`}>
             {status === "critico" ? "Crítico" : status === "alerta" ? "Atenção" : "Saudável"}
@@ -431,7 +437,7 @@ export function TireViewer360AR({
             autoPlay
           />
         )}
-        {viewMode === "photo" && photoData && !arMode ? (
+        {showingPhoto ? (
           <div className="tire-photo-preview-wrap">
             <img src={photoData} alt={`Foto do pneu ${code}`} className="tire-photo-preview" />
           </div>
@@ -444,7 +450,7 @@ export function TireViewer360AR({
 
       <div className="tire-360-controls">
         <div className="tire-360-controls-row">
-          <div className="tire-360-control-group">
+          {!showingPhoto && <div className="tire-360-control-group">
             <button
               type="button"
               className="hud-icon-btn"
@@ -480,11 +486,11 @@ export function TireViewer360AR({
             >
               <RotateCw size={15} />
             </button>
-          </div>
+          </div>}
 
           <div className="tire-360-caption">
             <span>{brand} {model} · {size}</span>
-            <small>Arraste para girar 360°</small>
+            {!showingPhoto && <small>Arraste para girar 360°</small>}
           </div>
 
           {canEdit && onSavePhoto && (
@@ -525,7 +531,7 @@ export function TireViewer360AR({
           <span>Vida <b>{retreadCount + 1}ª</b></span>
         </div>
       </div>
-      {photoMessage && <p className="tire-photo-feedback" role="status">{photoMessage}</p>}
+      {photoMessage && <p className={photoError ? "error" : "success"} role={photoError ? "alert" : "status"}>{photoMessage}</p>}
     </div>
   );
 }

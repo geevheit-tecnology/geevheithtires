@@ -87,6 +87,7 @@ const nav = [
   { id: "account", name:"Minha conta", icon:Users },
   { id: "plan", name: "Plano e cobrança", icon: CreditCard },
 ];
+const operationalTabs = ["vehicles", "tires", "drivers", "users", "reports", "alerts"];
 export default function Panel() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -322,7 +323,31 @@ export default function Panel() {
     const timer=setInterval(()=>{if(document.visibilityState!=="visible"||(typeof navigator!=="undefined"&&!navigator.onLine))return;void Promise.all([api("dashboard"),all("alerts"),api("entitlements")]).then(([d,a,rights])=>{setDash(d);setAlerts(a);setAccess(rights);setIsOffline(false)}).catch(()=>{})},60000);
     return()=>clearInterval(timer);
   },[]);
+  function requireRenewal() {
+    if (access.status !== "expired") return false;
+    redirectToBilling();
+    return true;
+  }
+  function redirectToBilling() {
+    setModal("");
+    setDossierTireId(undefined);
+    setNotice("");
+    setError("Seu plano venceu. Escolha um plano em Plano e cobrança para renovar o acesso.");
+    setTab("plan");
+    window.scrollTo(0, 0);
+  }
+  useEffect(() => {
+    window.addEventListener("plan-payment-required", redirectToBilling);
+    return () => window.removeEventListener("plan-payment-required", redirectToBilling);
+  }, []);
+  const submitLock = useRef(false);
+  const alertLock = useRef(false);
+  const [readingAlert, setReadingAlert] = useState(false);
+  function openRegistration(form: string) {
+    if (!requireRenewal()) setModal(form);
+  }
   async function openMap(v: Vehicle) {
+    if (requireRenewal()) return;
     setError("");
     const buildOfflineMap = () => {
       const cfg = configurations.find((c) => c.id === v.template_id);
@@ -348,6 +373,7 @@ export default function Panel() {
     }
   }
   async function select(t: Tire) {
+    if (requireRenewal()) return;
     setInspectionClient(crypto.randomUUID());
     setSelected(t);
     setHistory([]);
@@ -365,6 +391,9 @@ export default function Panel() {
   }
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitLock.current || requireRenewal()) return;
+    submitLock.current = true;
+    setNotice("");
     setBusy(true);
     setError("");
     const data: Record<string, unknown> = Object.fromEntries(
@@ -411,6 +440,7 @@ export default function Panel() {
       } catch {
         setError("Não foi possível guardar a inspeção neste aparelho. Mantenha o formulário aberto e tente novamente.");
       } finally {
+        submitLock.current = false;
         setBusy(false);
       }
       return;
@@ -440,6 +470,7 @@ export default function Panel() {
       }
       setError((e as Error).message);
     } finally {
+      submitLock.current = false;
       setBusy(false);
     }
   }
@@ -494,6 +525,10 @@ export default function Panel() {
                 className={tab === n.id ? "active" : ""}
                 key={n.id}
                 onClick={() => {
+                  if (operationalTabs.includes(n.id) && requireRenewal()) {
+                    setMobileMenuOpen(false);
+                    return;
+                  }
                   setTab(n.id);
                   setSearch("");
                   setMobileMenuOpen(false);
@@ -551,7 +586,13 @@ export default function Panel() {
             <div className="user-avatar">{user?.name?.slice(0, 1) || "G"}</div>
           </div>
         </header>
-        <main className="panel-content">
+        <main className="panel-content" onClickCapture={e => {
+          if (!operationalTabs.includes(tab) || !(e.target instanceof Element) || !e.target.closest("button, a, summary")) return;
+          if (requireRenewal()) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}>
           <div className="panel-title">
             <div>
               <span className="label">CONTROLE DE PNEUS • FROTA • MANUTENÇÃO</span>
@@ -583,11 +624,12 @@ export default function Panel() {
               Você pode consultar a frota e registrar inspeções normalmente; elas serão enviadas quando o sinal voltar.
             </div>
           )}
-          {error && (
+          {!modal && error && (
             <div role="alert" className="error">
               {error}<button className="table-link" onClick={()=>{setSupportDraft(`Erro observado: ${error}\nMódulo: ${tab}\nDescreva os passos para reproduzir:`);setTab("support");setError("")}}>Reportar este erro</button>
             </div>
           )}
+          {access.status === "expired" && tab !== "plan" && <div className="error" role="alert">Seu plano venceu. <button className="table-link" onClick={redirectToBilling}>Escolher plano e pagar</button></div>}
           {notice && (
             <div role="status" className="success dismiss">
               {notice}
@@ -604,9 +646,9 @@ export default function Panel() {
               {manage && loaded && <section className="registration-actions" aria-label="Cadastros da gestão de pneus">
                 <div><span className="label">CADASTROS DA OPERAÇÃO</span><h2>Do estoque à estrada</h2><p>Abra o cadastro, preencha os dados e salve para incluir na operação.</p></div>
                 <div className="registration-buttons">
-                  <button className="button" onClick={() => setModal("tires")}><CircleDot size={19}/>Cadastrar pneu<Plus size={17}/></button>
-                  <button className="button outline" onClick={() => setModal("vehicles")}><Truck size={19}/>Cadastrar veículo<Plus size={17}/></button>
-                  <button className="button outline" onClick={() => setTab("drivers")}><Users size={19}/>Cadastrar motorista<ArrowUpRight size={17}/></button>
+                  <button className="button" onClick={() => openRegistration("tires")}><CircleDot size={19}/>Cadastrar pneu<Plus size={17}/></button>
+                  <button className="button outline" onClick={() => openRegistration("vehicles")}><Truck size={19}/>Cadastrar veículo<Plus size={17}/></button>
+                  <button className="button outline" onClick={() => { if (!requireRenewal()) setTab("drivers"); }}><Users size={19}/>Cadastrar motorista<ArrowUpRight size={17}/></button>
                 </div>
               </section>}
               <div className="stats">
@@ -674,7 +716,7 @@ export default function Panel() {
                         action: "users",
                       },
                     ].map((s, i) => (
-                      <button key={s.title} onClick={() => setModal(s.action)}>
+                      <button key={s.title} onClick={() => openRegistration(s.action)}>
                         <span className={s.done ? "step done" : "step"}>
                           {s.done ? <CheckCircle2 size={19} /> : i + 1}
                         </span>
@@ -689,7 +731,7 @@ export default function Panel() {
                 <section className="surface">
                   <div className="surface-title">
                     <h3>Sua frota</h3>
-                    <button onClick={() => setTab("vehicles")}>
+                    <button onClick={() => { if (!requireRenewal()) setTab("vehicles"); }}>
                       Ver todos →
                     </button>
                   </div>
@@ -722,7 +764,7 @@ export default function Panel() {
                       {manage && (
                         <button
                           className="button small"
-                          onClick={() => setModal("vehicles")}
+                          onClick={() => openRegistration("vehicles")}
                         >
                           Cadastrar veículo <Plus size={16} />
                         </button>
@@ -770,7 +812,7 @@ export default function Panel() {
                 {manage && (
                   <button
                     className="button small"
-                    onClick={() => setModal("vehicles")}
+                    onClick={() => openRegistration("vehicles")}
                   >
                     <Plus size={17} />
                     Novo veículo
@@ -835,7 +877,7 @@ export default function Panel() {
               </div>
             </>
           )}
-          {dossierTireId && <TireInventory tires={tires} vehicles={vehicles} role={user?.role||""} onChange={async()=>{await load();if(map)setMap(await api(`vehicles/${map.vehicle.id}/tire-map`))}} onInspect={t=>void select(t)} tireId={dossierTireId} onClose={()=>setDossierTireId(undefined)}/>}
+          {dossierTireId && <TireInventory tires={tires} vehicles={vehicles} role={user?.role||""} onChange={async()=>{await load();if(map)setMap(await api(`vehicles/${map.vehicle.id}/tire-map`))}} onInspect={t=>void select(t)} tireId={dossierTireId} onClose={()=>setDossierTireId(undefined)} onArchived={setNotice}/>}
           {tab === "support"&&<SupportCenter draft={supportDraft}/>}
           {tab === "account"&&<AccountCenter/>}
           {tab === "reports" && (manage||user?.role==="tire_tech") && <TireReports onOpen={setDossierTireId}/>}
@@ -846,7 +888,7 @@ export default function Panel() {
                 {manage && (
                   <button
                     className="button small"
-                    onClick={() => setModal("tires")}
+                    onClick={() => openRegistration("tires")}
                   >
                     <Plus size={17} />
                     Novo pneu
@@ -872,12 +914,22 @@ export default function Panel() {
                   {!a.read && (
                     <button
                       className="table-link"
+                      disabled={readingAlert}
                       onClick={async () => {
+                        if (alertLock.current) return;
+                        alertLock.current = true;
+                        setReadingAlert(true);
+                        setError("");
+                        setNotice("");
                         try {
                           await api(`alerts/${a.id}/read`, {}, "PATCH");
+                          setNotice("Alerta marcado como lido.");
                           await load();
                         } catch (e) {
                           setError((e as Error).message);
+                        } finally {
+                          alertLock.current = false;
+                          setReadingAlert(false);
                         }
                       }}
                     >
@@ -900,7 +952,7 @@ export default function Panel() {
                 <p>Cada pessoa tem seu próprio acesso.</p>
                 <button
                   className="button small"
-                  onClick={() => setModal("users")}
+                  onClick={() => openRegistration("users")}
                 >
                   <Plus size={17} />
                   Convidar pessoa
@@ -962,6 +1014,7 @@ export default function Panel() {
               </h2>
               <button
                 aria-label="Fechar formulário"
+                disabled={busy}
                 className="icon-button"
                 onClick={() => setModal("")}
               >

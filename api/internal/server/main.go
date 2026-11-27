@@ -1041,6 +1041,7 @@ func NewRouter(a *App) http.Handler {
 			r.Post("/vehicles", a.createVehicle)
 			r.Post("/tires", a.createTire)
 			r.Patch("/tires/{id}/identity", a.updateTireIdentity)
+			r.Delete("/tires/{id}", a.archiveTire)
 			r.Patch("/tires/{id}/photo", a.updateTireMedia)
 			r.Patch("/tires/{id}/media", a.updateTireMedia)
 			r.Post("/tires/{id}/movements", a.moveTire)

@@ -46,7 +46,7 @@ func (a *App) billingGuard(next http.Handler) http.Handler {
 			return
 		}
 		if !allowed {
-			problem(w, 402, "Acesso somente para consulta. Abra Plano e cobrança para regularizar sua assinatura.")
+			write(w, 402, map[string]any{"title": "Acesso somente para consulta. Abra Plano e cobrança para regularizar sua assinatura.", "status": 402, "code": "plan_payment_required"})
 			return
 		}
 		// Release this read transaction before the handler acquires its own connection.
@@ -130,7 +130,9 @@ func (a *App) billingStatus(w http.ResponseWriter, r *http.Request) {
  'vehicle_limit',case when s.paid_until>now() then s.vehicle_limit else 15 end,'user_limit',case when s.paid_until>now() then s.user_limit else 3 end,
  'vehicles',(select count(*) from vehicles where company_id=c.id and deleted_at is null),'users',(select count(*) from users where company_id=c.id and deleted_at is null),
  'plans',coalesce((select jsonb_agg(to_jsonb(p) order by price_cents) from billing_plans p where published),'[]'),
- 'invoices',coalesce((select jsonb_agg(to_jsonb(x)) from (select id,plan_id,price_cents,status,checkout_url,due_date,paid_at,environment,source,reference from billing_invoices where company_id=c.id order by created_at desc limit 24) x),'[]'))
+ 'invoices',coalesce((select jsonb_agg(to_jsonb(x)) from (select b.id,plan_id,price_cents,status,checkout_url,due_date,paid_at,environment,source,reference,
+ exists(select 1 from audit_log a where a.company_id=b.company_id and a.entity_id=b.id and a.entity='pix_payment_notified') as payment_notified
+ from billing_invoices b where b.company_id=c.id order by b.created_at desc limit 24) x),'[]'))
  from companies c join subscriptions s on s.company_id=c.id where c.id=$1 and c.deleted_at is null`, claims(r).Company).Scan(&raw)
 	if e != nil {
 		problem(w, 503, "Não foi possível carregar a assinatura.")
@@ -164,19 +166,20 @@ func (a *App) billingStatus(w http.ResponseWriter, r *http.Request) {
 				cents := int(centsFloat)
 				txid := sanitizeTxID(ref)
 				out["active_pix"] = map[string]any{
-					"invoice_id":    inv["id"],
-					"plan_id":       inv["plan_id"],
-					"price_cents":   cents,
-					"due_date":      inv["due_date"],
-					"reference":     ref,
-					"txid":          txid,
-					"pix_payload":   buildPixPayload(cfg, cents, txid),
-					"pix_key":       cfg.Key,
-					"receiver_name": cfg.ReceiverName,
-					"bank_code":     cfg.BankCode,
-					"bank_name":     cfg.BankName,
-					"agency":        cfg.Agency,
-					"account":       cfg.Account,
+					"invoice_id":       inv["id"],
+					"payment_notified": inv["payment_notified"],
+					"plan_id":          inv["plan_id"],
+					"price_cents":      cents,
+					"due_date":         inv["due_date"],
+					"reference":        ref,
+					"txid":             txid,
+					"pix_payload":      buildPixPayload(cfg, cents, txid),
+					"pix_key":          cfg.Key,
+					"receiver_name":    cfg.ReceiverName,
+					"bank_code":        cfg.BankCode,
+					"bank_name":        cfg.BankName,
+					"agency":           cfg.Agency,
+					"account":          cfg.Account,
 				}
 				break
 			}

@@ -3648,3 +3648,7 @@ img, svg, canvas, video {
   border-color: var(--line);
   color: var(--ink);
 }
+
+.tire-map-photo { width: 28px; height: 24px; object-fit: cover; border-radius: 4px; }
+
+.pix-qr { max-width: 100%; height: auto; }

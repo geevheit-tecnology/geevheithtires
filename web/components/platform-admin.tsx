@@ -56,6 +56,7 @@ type Snapshot = {
   };
   operations: {
     expired: number;
+    pending_pix?: number;
     suspended: number;
     expiring: number;
     open_tickets: number;
@@ -108,6 +109,7 @@ export default function PlatformAdmin() {
     [tab, setTab] = useState("overview"),
     [updated, setUpdated] = useState(""),
     [menuOpen, setMenuOpen] = useState(false);
+  const [pendingOnly, setPendingOnly] = useState(false);
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -149,6 +151,7 @@ export default function PlatformAdmin() {
     };
   }, [load]);
   function navigate(id: string) {
+    setPendingOnly(false);
     setTab(id);
     setError("");
     setMenuOpen(false);
@@ -269,6 +272,15 @@ export default function PlatformAdmin() {
               {updated && <small>Atualizado às {updated}</small>}
             </div>
           </div>
+          {!!data?.operations.pending_pix && (
+            <div className="info" role="alert">
+              {data.operations.pending_pix} pagamento(s) Pix aguardando conferência.{" "}
+              <button type="button" className="table-link" onClick={() => {
+                navigate("clients");
+                setPendingOnly(true);
+              }}>Conferir pagamentos</button>
+            </div>
+          )}
           {error && (
             <div className="error" role="alert">
               {error}
@@ -475,7 +487,7 @@ export default function PlatformAdmin() {
                 </>
               )}
               {tab === "clients" && (
-                <PlatformClients plans={data.plans} onChange={load} />
+                <PlatformClients key={String(pendingOnly)} plans={data.plans} onChange={load} pendingOnly={pendingOnly} />
               )}
               {tab === "finance" && (
                 <PlatformFinance plans={data.plans} onChange={load} />

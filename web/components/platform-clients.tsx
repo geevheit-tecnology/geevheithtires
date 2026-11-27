@@ -1,17 +1,276 @@
 "use client";
-import {FormEvent,useEffect,useState} from "react";
-import {api} from "./api";
-import {date,money,Plan} from "./billing-panel";
-type Client={id:string;name:string;cnpj:string;owner_email:string;status:string;plan_id:string|null;vehicles:number;users:number;vehicle_limit:number;user_limit:number;trial_ends_at:string;paid_until:string|null;updated_at:string};
-type Detail={company:{id:string;name:string;cnpj:string;deleted_at:string|null};subscription:{plan_id:string|null;paid_until:string|null;updated_at:string};users:{id:string;name:string;email:string;role:string;deleted_at:string|null}[];invoices:{id:string;plan_id:string;price_cents:number;status:string;due_date:string}[]};
-const states:Record<string,string>={active:"Ativa",trial:"Em avaliação",suspended:"Suspensa",expired:"Vencida",closed:"Encerrada"};
-export default function PlatformClients({plans,onChange}:{plans:Plan[];onChange:()=>Promise<void>}){const [clients,setClients]=useState<Client[]>([]),[next,setNext]=useState(""),[query,setQuery]=useState(""),[detail,setDetail]=useState<Detail|null>(null),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
- async function load(q=query,append=false){try{const out=await api(`platform/clients?${q}${append?`&before=${next}`:""}`);setClients(old=>append?[...old,...out.data]:out.data);setNext(out.next_cursor);setError("")}catch(e){setError((e as Error).message)}}
- async function open(id:string){try{setDetail(await api(`platform/clients/${id}`));setError("")}catch(e){setError((e as Error).message)}}
- useEffect(()=>{void load("")},[]);
- function filter(e:FormEvent<HTMLFormElement>){e.preventDefault();const q=new URLSearchParams(Object.fromEntries(new FormData(e.currentTarget)) as Record<string,string>).toString();setQuery(q);void load(q)}
- async function access(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!detail)return;const f=new FormData(e.currentTarget);setBusy(true);setError("");try{await api(`platform/clients/${detail.company.id}/access`,{plan_id:f.get("plan_id"),days:Number(f.get("days")),reason:f.get("reason"),expected_updated_at:detail.subscription.updated_at});setNotice("Vigência de acesso atualizada. Nenhum pagamento foi registrado.");await open(detail.company.id);await load();await onChange()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- async function change(id:string,operation:string){const reason=window.prompt("Justificativa desta alteração (mínimo 5 caracteres):");if(!reason)return;setBusy(true);try{await api("platform/change",{target:id,operation,reason,payload:operation==="trial"?{days:14}:{}});setNotice("Alteração salva na auditoria.");await load();await onChange()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- async function close(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!detail)return;setBusy(true);try{await api(`platform/clients/${detail.company.id}/close`,Object.fromEntries(new FormData(e.currentTarget)));setNotice("Empresa encerrada; dados operacionais arquivados.");setDetail(null);await load();await onChange()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- return <><section className="surface management-section"><h2>Clientes e empresas</h2><form className="report-filters" onSubmit={filter}><label>Buscar clientes<input name="search" maxLength={150} placeholder="Empresa, CNPJ ou e-mail"/></label><label>Situação<select name="status" aria-label="Situação do cliente"><option value="">Todas as empresas ativas</option>{Object.entries(states).map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label><button className="button" disabled={busy}>Buscar clientes</button></form>{error&&<p className="error" role="alert">{error}</p>}{notice&&<p className="success" role="status">{notice}</p>}<div className="table-wrap"><table><thead><tr><th>Empresa / contato</th><th>Situação / plano</th><th>Uso</th><th>Vigência</th><th>Gestão</th></tr></thead><tbody>{clients.map(c=><tr key={c.id}><td><strong>{c.name}</strong><small>{c.cnpj}</small><small>{c.owner_email}</small></td><td>{states[c.status]}<small>{c.plan_id||"Avaliação Starter"}</small></td><td>{c.vehicles}/{c.vehicle_limit} veículos<small>{c.users}/{c.user_limit} usuários</small></td><td>{date(c.paid_until)}<small>Avaliação: {date(c.trial_ends_at)}</small></td><td><button className="table-link" onClick={()=>void open(c.id)}>Gerenciar cliente</button>{c.status!=="closed"&&<div className="commercial-actions"><button className="table-link" disabled={busy} onClick={()=>void change(c.id,c.status==="suspended"?"restore":"suspend")}>{c.status==="suspended"?"Restaurar":"Suspender"}</button><button className="table-link" disabled={busy} onClick={()=>void change(c.id,"trial")}>Prorrogar 14 dias</button></div>}</td></tr>)}</tbody></table></div>{!clients.length&&<p>Nenhuma empresa encontrada.</p>}{next&&<button className="table-link" onClick={()=>void load(query,true)}>Mais clientes</button>}</section>{detail&&<section className="surface management-section client-detail"><div className="surface-title"><h2>{detail.company.name}</h2><button className="table-link" onClick={()=>setDetail(null)}>Fechar cliente</button></div><p>CNPJ {detail.company.cnpj}</p><h3>Usuários</h3>{detail.users.map(u=><p key={u.id}>{u.name} · {u.email} · {u.role}{u.deleted_at?" · encerrado":""}</p>)}{!detail.company.deleted_at&&<><h3>Definir plano e vigência</h3><p>Concessão administrativa auditada. Não gera cobrança nem registra pagamento; faturas existentes permanecem com suas condições.</p><form onSubmit={access}><fieldset disabled={busy} className="plain-fields"><div className="form-grid"><label>Plano do cliente<select name="plan_id" aria-label="Plano do cliente" defaultValue={detail.subscription.plan_id||"starter"}>{plans.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Dias de acesso a partir de hoje<input name="days" type="number" min={1} max={366} defaultValue={30} required/></label></div><label>Justificativa da vigência<textarea name="reason" minLength={5} maxLength={500} required/></label><button className="button" disabled={busy}>Salvar acesso ao plano</button></fieldset></form><details><summary>Encerrar empresa</summary><p>Revoga o acesso de todos os usuários. O histórico fica arquivado. Faturas em aberto precisam ser regularizadas antes.</p><form onSubmit={close}><label>Confirme o CNPJ da empresa<input name="confirmation" required autoComplete="off"/></label><label>Justificativa do encerramento<textarea name="reason" minLength={5} maxLength={500} required/></label><label className="checkbox"><input type="checkbox" required/>Confirmo o encerramento desta empresa.</label><button className="button danger" disabled={busy}>Encerrar este cliente</button></form></details></>}<h3>Mensalidades recentes</h3>{!detail.invoices.length?<p>Nenhuma fatura registrada.</p>:detail.invoices.map(i=><p key={i.id}>{i.plan_id} · {money(i.price_cents)} · {i.status} · {date(i.due_date)}</p>)}</section>}</>
+
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { api } from "./api";
+import { date, money, Plan } from "./billing-panel";
+
+type Client = {
+  id: string; name: string; cnpj: string; owner_email: string; status: string;
+  plan_id: string | null; vehicles: number; users: number; vehicle_limit: number;
+  user_limit: number; trial_ends_at: string; paid_until: string | null; pending_pix?: boolean;
+};
+type Invoice = {
+  id: string; plan_id: string; price_cents: number; status: string; due_date: string;
+  paid_at: string | null; source?: string; environment: string; version?: number;
+  reference?: string; payment_notified?: boolean;
+};
+type Detail = {
+  company: { id: string; name: string; cnpj: string; deleted_at: string | null };
+  subscription: { plan_id: string | null; paid_until: string | null; updated_at: string };
+  users: { id: string; name: string; email: string; role: string; deleted_at: string | null }[];
+  invoices: Invoice[];
+};
+
+const states: Record<string, string> = {
+  active: "Ativa", trial: "Em avaliação", suspended: "Suspensa", expired: "Vencida", closed: "Encerrada",
+};
+const invoiceStates: Record<string, string> = {
+  creating: "Em geração", pending: "Pendente", paid: "Pago", overdue: "Vencido", cancelled: "Cancelado", refunded: "Estornado",
+};
+
+export default function PlatformClients({ plans, onChange, pendingOnly }: {
+  plans: Plan[]; onChange: () => Promise<void>; pendingOnly: boolean;
+}) {
+  const initialQuery = pendingOnly ? "status=pending_pix" : "";
+  const [clients, setClients] = useState<Client[]>([]);
+  const [next, setNext] = useState("");
+  const [query, setQuery] = useState(initialQuery);
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [payment, setPayment] = useState<Invoice | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const paymentForm = useRef<HTMLFormElement>(null);
+  const planName = (id: string | null) => plans.find(p => p.id === id)?.name || id || "Avaliação Starter";
+
+  async function load(q = query, append = false) {
+    const out = await api(`platform/clients?${q}${append ? `&before=${next}` : ""}`);
+    setClients(old => append ? [...old, ...out.data] : out.data);
+    setNext(out.next_cursor);
+  }
+
+  async function run(work: () => Promise<void>) {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await work();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { void run(() => load(initialQuery)); }, [initialQuery]);
+  const detailOpen = !!detail;
+  useEffect(() => {
+    if (detailOpen) dialog.current?.showModal();
+    else dialog.current?.close();
+  }, [detailOpen]);
+  useEffect(() => {
+    if (payment) paymentForm.current?.scrollIntoView({ block: "nearest" });
+  }, [payment]);
+  useEffect(() => {
+    if (error || notice) dialog.current?.scrollTo({ top: 0 });
+  }, [error, notice]);
+
+  function open(id: string) {
+    void run(async () => {
+      setPayment(null);
+      setDetail(await api(`platform/clients/${id}`));
+    });
+  }
+
+  function filter(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const q = new URLSearchParams(Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>).toString();
+    void run(async () => {
+      await load(q);
+      setQuery(q);
+    });
+  }
+
+  function saveAccess(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!detail) return;
+    const form = new FormData(e.currentTarget);
+    const id = detail.company.id;
+    void run(async () => {
+      await api(`platform/clients/${id}/access`, {
+        plan_id: form.get("plan_id"), days: Number(form.get("days")), reason: form.get("reason"),
+        expected_updated_at: detail.subscription.updated_at,
+      });
+      setNotice("Plano e vigência atualizados.");
+      await refreshClient(id);
+    });
+  }
+
+  async function refreshClient(id: string) {
+    await onChange();
+    setDetail(await api(`platform/clients/${id}`));
+    await load();
+  }
+
+  function change(id: string, operation: string) {
+    if (lock.current) return;
+    const reason = window.prompt("Justificativa desta alteração (mínimo 5 caracteres):");
+    if (!reason) return;
+    void run(async () => {
+      await api("platform/change", { target: id, operation, reason, payload: operation === "trial" ? { days: 14 } : {} });
+      setNotice("Alteração registrada na auditoria.");
+      await load();
+      await onChange();
+    });
+  }
+
+  function closeCompany(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!detail) return;
+    const form = Object.fromEntries(new FormData(e.currentTarget));
+    void run(async () => {
+      await api(`platform/clients/${detail.company.id}/close`, form);
+      setDetail(null);
+      setNotice("Cliente encerrado. Histórico arquivado.");
+      await load();
+      await onChange();
+    });
+  }
+
+  function approve(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!detail || !payment) return;
+    const form = new FormData(e.currentTarget);
+    const id = detail.company.id;
+    void run(async () => {
+      await api(`platform/finance/${payment.id}`, {
+        operation: "pay", expected_version: payment.version, reference: form.get("reference"),
+        paid_on: form.get("paid_on"), reason: form.get("reason"),
+      }, "PATCH");
+      setPayment(null);
+      setNotice("Recebimento confirmado e um mês de acesso aplicado ao cliente.");
+      await refreshClient(id);
+    });
+  }
+
+  function closeDetail() {
+    if (lock.current) return;
+    setDetail(null);
+    setPayment(null);
+  }
+
+  const feedback = <>
+    {error && <p className="error" role="alert">{error}</p>}
+    {notice && <p className="success" role="status">{notice}</p>}
+  </>;
+
+  return <>
+    <section className="surface management-section">
+      <h2>Clientes e empresas</h2>
+      <form className="report-filters" onSubmit={filter}>
+        <label>Buscar clientes<input name="search" maxLength={150} placeholder="Empresa, CNPJ ou e-mail" /></label>
+        <label>Situação<select name="status" defaultValue={pendingOnly ? "pending_pix" : ""}>
+          <option value="">Todas as empresas em operação</option>
+          <option value="pending_pix">Pix aguardando conferência</option>
+          {Object.entries(states).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select></label>
+        <button className="button" disabled={busy}>Buscar clientes</button>
+      </form>
+      {!detail && feedback}
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Empresa</th><th>CNPJ</th><th>Contato</th><th>Situação</th><th>Plano</th><th>Uso</th><th>Vigência</th><th>Ações</th></tr></thead>
+          <tbody>{clients.map(client => <tr key={client.id}>
+            <td><button type="button" className="table-link" disabled={busy} onClick={() => open(client.id)}>{client.name}</button></td>
+            <td>{client.cnpj}</td><td>{client.owner_email}</td>
+            <td>{states[client.status]}{client.pending_pix && <small>Pix aguardando conferência</small>}</td>
+            <td>{planName(client.plan_id)}</td>
+            <td>{client.vehicles}/{client.vehicle_limit} veículos · {client.users}/{client.user_limit} usuários</td>
+            <td>{date(client.paid_until || client.trial_ends_at)}</td>
+            <td><div className="commercial-actions">
+              <button className="table-link" disabled={busy} onClick={() => open(client.id)}>
+                {client.pending_pix ? "Conferir pagamento" : client.status === "closed" ? "Ver ficha" : "Editar / excluir"}
+              </button>
+              {client.status !== "closed" && <>
+                <button className="table-link" disabled={busy} onClick={() => change(client.id, client.status === "suspended" ? "restore" : "suspend")}>
+                  {client.status === "suspended" ? "Restaurar" : "Suspender"}
+                </button>
+                <button className="table-link" disabled={busy} onClick={() => change(client.id, "trial")}>Prorrogar 14 dias</button>
+              </>}
+            </div></td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+      {!clients.length && !busy && <p>Nenhuma empresa encontrada.</p>}
+      {next && <button className="table-link" disabled={busy} onClick={() => void run(() => load(query, true))}>Mais clientes</button>}
+    </section>
+    <dialog ref={dialog} className="tire-dossier-dialog client-detail" aria-label="Ficha do cliente" onCancel={e => { e.preventDefault(); closeDetail(); }}>
+      {detail && <>
+        <div className="dossier-toolbar"><h2>{detail.company.name}</h2><button className="table-link" disabled={busy} onClick={closeDetail}>Fechar ficha</button></div>
+        {feedback}
+        <p>CNPJ {detail.company.cnpj} · {planName(detail.subscription.plan_id)} · Vigência paga até {date(detail.subscription.paid_until)}</p>
+        <h3>Usuários</h3>
+        {detail.users.map(user => <p key={user.id}>{user.name} · {user.email} · {user.role}{user.deleted_at ? " · encerrado" : ""}</p>)}
+        <h3>Histórico de pagamentos</h3>
+        {!detail.invoices.length && <p>Nenhuma fatura registrada.</p>}
+        {!!detail.invoices.length && <div className="table-wrap"><table>
+          <thead><tr><th>Plano</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Situação</th><th>Referência</th><th>Ações</th></tr></thead>
+          <tbody>{detail.invoices.map(invoice => {
+            const openInvoice = ["pending", "overdue"].includes(invoice.status);
+            return <tr key={invoice.id}>
+              <td>{planName(invoice.plan_id)}</td><td>{money(invoice.price_cents)}</td>
+              <td>{date(invoice.due_date)}</td><td>{date(invoice.paid_at)}</td>
+              <td>{invoice.payment_notified && openInvoice ? "Pix informado" : invoiceStates[invoice.status] || invoice.status}</td>
+              <td>{invoice.reference || "—"}</td>
+              <td>{!detail.company.deleted_at && openInvoice && invoice.source === "manual" && invoice.environment === "production" &&
+                <button className="table-link" disabled={busy} onClick={() => { setError(""); setNotice(""); setPayment(invoice); }}>Aprovar pagamento</button>}</td>
+            </tr>;
+          })}</tbody>
+        </table></div>}
+        {payment && <form ref={paymentForm} key={payment.id} className="surface management-section" onSubmit={approve}>
+          <h3>Confirmar pagamento de {money(payment.price_cents)}</h3>
+          <p>Confira o recebimento no extrato antes de confirmar.</p>
+          <fieldset disabled={busy} className="plain-fields">
+            <label>Referência do recebimento<input name="reference" required minLength={3} maxLength={200} defaultValue={payment.reference} /></label>
+            <label>Data do pagamento<input name="paid_on" type="date" required max={new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date())} /></label>
+            <label>Justificativa<textarea name="reason" required minLength={5} maxLength={500} /></label>
+            <button className="button">Confirmar recebimento</button>{" "}
+            <button className="table-link" type="button" onClick={() => setPayment(null)}>Cancelar</button>
+          </fieldset>
+        </form>}
+        {!detail.company.deleted_at && <>
+          <h3>Editar plano e vigência</h3>
+          <form key={detail.subscription.updated_at} onSubmit={saveAccess}>
+            <fieldset disabled={busy} className="plain-fields">
+              <div className="form-grid">
+                <label>Plano do cliente<select name="plan_id" defaultValue={detail.subscription.plan_id || "starter"}>
+                  {plans.map(plan => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+                </select></label>
+                <label>Dias de acesso a partir de hoje<input name="days" type="number" min={1} max={366} defaultValue={30} required /></label>
+              </div>
+              <label>Justificativa da vigência<textarea name="reason" minLength={5} maxLength={500} required /></label>
+              <button className="button">Salvar acesso ao plano</button>
+            </fieldset>
+          </form>
+          <details>
+            <summary>Excluir cliente da operação</summary>
+            <p>Revoga o acesso dos usuários e arquiva o histórico. Regularize as faturas em aberto primeiro.</p>
+            <form onSubmit={closeCompany}>
+              <fieldset disabled={busy} className="plain-fields">
+                <label>Confirme o CNPJ da empresa<input name="confirmation" required autoComplete="off" /></label>
+                <label>Justificativa do encerramento<textarea name="reason" minLength={5} maxLength={500} required /></label>
+                <label className="checkbox"><input type="checkbox" required />Confirmo o encerramento desta empresa.</label>
+                <button className="button danger">Encerrar este cliente</button>
+              </fieldset>
+            </form>
+          </details>
+        </>}
+      </>}
+    </dialog>
+  </>;
 }

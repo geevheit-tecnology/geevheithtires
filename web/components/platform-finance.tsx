@@ -77,6 +77,7 @@ export default function PlatformFinance({
     [price, setPrice] = useState(String((plans[0]?.price_cents || 0) / 100));
   const dialog = useRef<HTMLDialogElement>(null),
     createID = useRef("");
+  const mutationLock = useRef(false);
   const load = useCallback(
     async (q = query, append = false) => {
       try {
@@ -142,6 +143,9 @@ export default function PlatformFinance({
   }
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (mutationLock.current) return;
+    mutationLock.current = true;
+    setNotice("");
     const f = new FormData(e.currentTarget);
     setBusy(true);
     setError("");
@@ -164,12 +168,15 @@ export default function PlatformFinance({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      mutationLock.current = false;
       setBusy(false);
     }
   }
   async function settle(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!action) return;
+    if (!action || mutationLock.current) return;
+    mutationLock.current = true;
+    setNotice("");
     const f = new FormData(e.currentTarget);
     setBusy(true);
     setError("");
@@ -198,6 +205,7 @@ export default function PlatformFinance({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      mutationLock.current = false;
       setBusy(false);
     }
   }

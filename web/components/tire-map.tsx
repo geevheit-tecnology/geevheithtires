@@ -51,6 +51,7 @@ export function TireMap({
         title={`${positionLabel(p,positions)}${t?.serial_number?` · Série ${t.serial_number}`:""}`}
       >
         <span>{p.startsWith("STEP")?p:`${positions.indexOf(p)+1} · ${p}`}</span>
+        {t?.photo_thumb && <img className="tire-map-photo" src={t.photo_thumb} alt="" width={28} height={24} />}
         <b>{t?.code || "—"}</b>
         <small>{t ? `${Number(t.tread_mm).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})} mm` : "Vazio"}</small>
       </button>

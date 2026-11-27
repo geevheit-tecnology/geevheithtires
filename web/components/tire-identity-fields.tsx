@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef,useState } from "react";
 import { api } from "./api";
 
 export type TireIdentity = { code: string; manufacture_year?: number | null; serial_number?: string | null; dot_code?: string | null; expires_on?: string | null; road_use?: string; version?: number };
@@ -16,7 +16,8 @@ export function TireIdentityFields({ tire, includeCode=false }: { tire?: TireIde
  </>;
 }
 export function TireIdentityEditor({ tire, onSaved }: { tire: TireIdentity & {id:string}; onSaved:()=>Promise<void> }) {
- const [busy,setBusy]=useState(false),[error,setError]=useState("");
- async function save(e:FormEvent<HTMLFormElement>) { e.preventDefault();setBusy(true);setError("");try { await api(`tires/${tire.id}/identity`,{...Object.fromEntries(new FormData(e.currentTarget)),manufacture_year:Number(new FormData(e.currentTarget).get("manufacture_year")),expected_version:tire.version},"PATCH");await onSaved(); } catch(e) {setError((e as Error).message)} finally {setBusy(false)} }
- return <details className="lifecycle-policy"><summary>Editar identificação, validade e tipo de via</summary><form onSubmit={save} key={tire.version}><fieldset disabled={busy} className="identity-fields"><TireIdentityFields tire={tire} includeCode/>{error&&<p className="error" role="alert">{error}</p>}<button className="button primary" disabled={busy}>{busy?"Salvando…":"Salvar identificação"}</button></fieldset></form></details>;
+ const [busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState("");
+ const lock=useRef(false);
+ async function save(e:FormEvent<HTMLFormElement>) { e.preventDefault();if(lock.current)return;lock.current=true;setBusy(true);setError("");setNotice("");try { await api(`tires/${tire.id}/identity`,{...Object.fromEntries(new FormData(e.currentTarget)),manufacture_year:Number(new FormData(e.currentTarget).get("manufacture_year")),expected_version:tire.version},"PATCH");setNotice("Cadastro do pneu atualizado.");await onSaved(); } catch(e) {setError((e as Error).message)} finally {lock.current=false;setBusy(false)} }
+ return <details className="lifecycle-policy"><summary>Editar identificação, validade e tipo de via</summary><form onSubmit={save} key={tire.version}><fieldset disabled={busy} className="identity-fields"><TireIdentityFields tire={tire} includeCode/>{notice&&<p className="success" role="status">{notice}</p>}{error&&<p className="error" role="alert">{error}</p>}<button className="button primary" disabled={busy}>{busy?"Salvando…":"Salvar identificação"}</button></fieldset></form></details>;
 }

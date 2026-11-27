@@ -173,6 +173,10 @@ func (a *App) createPixCharge(w http.ResponseWriter, r *http.Request) {
 	err := t.QueryRow(ctx, `select id,plan_id,price_cents,due_date::text,source,reference from billing_invoices where company_id=$1 and status in ('creating','pending','overdue')`, c.Company).Scan(&invoiceID, &oldPlan, &oldCents, &due, &source, &reference)
 	created := false
 	if err == nil {
+		if source != "manual" {
+			problem(w, 409, "Já existe uma cobrança aberta pelo gateway de pagamento.")
+			return
+		}
 		if oldPlan != d.Plan {
 			problem(w, 409, "Já existe uma cobrança aberta para outro plano. Regularize ou aguarde a administração antes de trocar de plano.")
 			return
@@ -189,7 +193,7 @@ func (a *App) createPixCharge(w http.ResponseWriter, r *http.Request) {
 		invoiceID = id()
 		due = time.Now().AddDate(0, 0, 3).Format("2006-01-02")
 		reference = newPixReference()
-		_, e = t.Exec(ctx, `insert into billing_invoices(id,company_id,plan_id,price_cents,vehicle_limit,user_limit,due_date,status,environment,source,reference) values($1,$2,$3,$4,$5,$6,$7,'pending','production','manual',$8)`, invoiceID, c.Company, d.Plan, cents, vehicles, users, due, reference)
+		_, e = t.Exec(ctx, `insert into billing_invoices(id,company_id,plan_id,price_cents,vehicle_limit,user_limit,due_date,status,environment,source,reference,provider_id) values($1,$2,$3,$4,$5,$6,$7,'pending','production','manual',$8,$9)`, invoiceID, c.Company, d.Plan, cents, vehicles, users, due, reference, "manual:"+invoiceID)
 		if e != nil {
 			problem(w, 503, "Não foi possível gerar a cobrança PIX.")
 			return
@@ -264,15 +268,31 @@ func (a *App) notifyPixPaid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if e = fleetLock(ctx, t, c.Company); e != nil {
+		inspectionError(w, e)
+		return
+	}
+
 	var invoiceID, planID, reference, due string
 	var cents int
 	if strings.TrimSpace(d.InvoiceID) != "" {
-		e = t.QueryRow(ctx, `select id,plan_id,price_cents,due_date::text,reference from billing_invoices where id=$1 and company_id=$2 and status in ('pending','overdue')`, d.InvoiceID, c.Company).Scan(&invoiceID, &planID, &cents, &due, &reference)
+		e = t.QueryRow(ctx, `select id,plan_id,price_cents,due_date::text,reference from billing_invoices where id=$1 and company_id=$2 and source='manual' and environment='production' and reference<>'' and status in ('pending','overdue')`, d.InvoiceID, c.Company).Scan(&invoiceID, &planID, &cents, &due, &reference)
 	} else {
-		e = t.QueryRow(ctx, `select id,plan_id,price_cents,due_date::text,reference from billing_invoices where company_id=$1 and status in ('pending','overdue') order by created_at desc limit 1`, c.Company).Scan(&invoiceID, &planID, &cents, &due, &reference)
+		e = t.QueryRow(ctx, `select id,plan_id,price_cents,due_date::text,reference from billing_invoices where company_id=$1 and source='manual' and environment='production' and reference<>'' and status in ('pending','overdue') order by created_at desc limit 1`, c.Company).Scan(&invoiceID, &planID, &cents, &due, &reference)
 	}
 	if e != nil {
 		problem(w, 404, "Nenhuma cobrança PIX pendente encontrada.")
+		return
+	}
+
+	var notified bool
+	e = t.QueryRow(ctx, "select exists(select 1 from audit_log where company_id=$1 and entity='pix_payment_notified' and entity_id=$2)", c.Company, invoiceID).Scan(&notified)
+	if e != nil {
+		inspectionError(w, e)
+		return
+	}
+	if notified {
+		write(w, 200, map[string]any{"ok": true, "reference": reference})
 		return
 	}
 
@@ -303,7 +323,10 @@ func (a *App) notifyPixPaid(w http.ResponseWriter, r *http.Request) {
 		problem(w, 500, "Não foi possível enviar o aviso de pagamento.")
 		return
 	}
-	_ = a.audit(ctx, t, c, "pix_payment_notified", invoiceID, map[string]any{"reference": reference, "note": d.Note})
+	if e = a.audit(ctx, t, c, "pix_payment_notified", invoiceID, map[string]any{"reference": reference, "note": d.Note}); e != nil {
+		inspectionError(w, e)
+		return
+	}
 	if e = t.Commit(ctx); e != nil {
 		problem(w, 500, "Não foi possível registrar o aviso de pagamento.")
 		return

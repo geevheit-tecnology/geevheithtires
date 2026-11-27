@@ -1,7 +1,8 @@
 "use client";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { planCatalog, provisionalPrice } from "../lib/plan-catalog";
 import { PlanBenefits, usePlanAccess } from "./plan-access";
+import QRCode from "qrcode";
 import { api } from "./api";
 
 export type Plan = {
@@ -22,6 +23,7 @@ type PixCharge = {
   reference: string;
   txid: string;
   pix_payload: string;
+  payment_notified?: boolean;
   pix_key: string;
   receiver_name: string;
   bank_code: string;
@@ -90,6 +92,36 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
   const [busy, setBusy] = useState("");
   const [notifying, setNotifying] = useState(false);
 
+  const paymentLock = useRef(false);
+  const [qr, setQr] = useState("");
+  const [reported, setReported] = useState("");
+  const payload = pix?.pix_payload;
+  const paymentReported = !!pix && (pix.payment_notified || reported === pix.invoice_id);
+  const pixBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let active = true;
+    setQr("");
+    if (payload) void QRCode.toDataURL(payload, { width: 240, margin: 4 })
+      .then(url => { if (active) setQr(url); })
+      .catch(() => { if (active) setError("Falha ao gerar o QR Code. Use o Pix Copia e Cola."); });
+    return () => { active = false; };
+  }, [payload]);
+
+  async function sharePix(charge: PixCharge) {
+    const text = `Pix GeevheitTire · ${charge.plan_name || data?.plans.find(plan => plan.id === charge.plan_id)?.name || charge.plan_id} · ${money(charge.price_cents)}
+Chave: ${charge.pix_key}
+Pix Copia e Cola: ${charge.pix_payload}`;
+    if (!navigator.share) {
+      await copyText("share", text);
+      return;
+    }
+    try {
+      await navigator.share({ title: "Pagamento Pix GeevheitTire", text });
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setError("Falha ao compartilhar. Copie os dados do Pix.");
+    }
+  }
+
   async function load() {
     try {
       const res: Billing = await api("billing");
@@ -97,7 +129,6 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
       if (res.active_pix) setPix(res.active_pix);
       else setPix(null);
       await refresh();
-      setError("");
     } catch (e) {
       setError((e as Error).message);
     }
@@ -105,7 +136,7 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
 
   useEffect(() => {
     const refreshOnFocus = () => {
-      if (document.visibilityState === "visible") void load();
+      if (document.visibilityState === "visible" && !paymentLock.current) void load();
     };
     refreshOnFocus();
     const timer = setInterval(refreshOnFocus, 15000);
@@ -126,12 +157,18 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
     }
   }
 
-  async function startPayment(planId: string) {
+  async function startPayment(planId: string, checkout = false) {
+    if (paymentLock.current) return;
+    if (!checkout && pix?.plan_id === planId) {
+      pixBox.current?.scrollIntoView({ block: "center" });
+      return;
+    }
+    paymentLock.current = true;
     setBusy(planId);
     setError("");
     setNotice("");
     try {
-      if (data?.payments_enabled) {
+      if (checkout || (!data?.pix_enabled && data?.payments_enabled)) {
         const res = await api("billing/checkout", { plan_id: planId });
         window.location.assign(res.checkout_url);
         return;
@@ -141,19 +178,21 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
       setNotice(
         `PIX gerado com identificador ${charge.reference}. Faça o pagamento e clique em "Já fiz o PIX" para agilizar a conferência e liberação do acesso.`,
       );
-      await load();
+      requestAnimationFrame(() => pixBox.current?.scrollIntoView({ block: "center" }));
     } catch (e) {
       setError((e as Error).message);
-      void load();
     } finally {
+      paymentLock.current = false;
       setBusy("");
     }
   }
 
   async function notifyPaid(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!pix) return;
-    const note = String(new FormData(e.currentTarget).get("note") || "").trim();
+    if (!pix || paymentLock.current || paymentReported) return;
+    paymentLock.current = true;
+    const form = e.currentTarget;
+    const note = String(new FormData(form).get("note") || "").trim();
     setNotifying(true);
     setError("");
     setNotice("");
@@ -162,10 +201,12 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
       setNotice(
         `Administração notificada sobre o pagamento ${pix.reference}. Assim que o recebimento for conferido no PicPay, seu acesso será liberado automaticamente.`,
       );
-      e.currentTarget.reset();
+      setReported(pix.invoice_id);
+      form.reset();
     } catch (err) {
       setError((err as Error).message);
     } finally {
+      paymentLock.current = false;
       setNotifying(false);
     }
   }
@@ -215,7 +256,7 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
               Seu acesso está disponível para consulta. Gere o PIX abaixo ou entre em contato com a administração para regularizar a empresa.
             </div>
           )}
-          {!data.payments_enabled && (
+          {data.pix_enabled && (
             <div className="info">
               <strong>Pagamento via PIX manual:</strong> clique em{" "}
               <b>Gerar PIX para pagar</b> no plano desejado, faça o PIX usando a
@@ -226,7 +267,7 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
           )}
 
           {pix && (
-            <div className="pix-box" role="region" aria-label="Dados para pagamento via PIX">
+            <div ref={pixBox} className="pix-box" role="region" aria-label="Dados para pagamento via PIX">
               <div className="pix-box-head">
                 <div>
                   <span className="label">COBRANÇA PIX EM ABERTO</span>
@@ -237,6 +278,10 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
                 <span className="pill alerta">Identificador: {pix.reference}</span>
               </div>
 
+              {qr && <img className="pix-qr" src={qr} width={240} height={240} alt="QR Code para pagar por Pix" />}
+              <button type="button" className="button small" onClick={() => void sharePix(pix)}>
+                {copied === "share" ? "Dados copiados" : "Compartilhar dados do Pix"}
+              </button>
               <div className="pix-grid">
                 <div className="pix-field">
                   <small>Chave PIX (E-mail)</small>
@@ -291,10 +336,10 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
                       placeholder="Ex: Pago às 14:30 via PicPay / Banco do Brasil"
                     />
                   </label>
-                  <button className="button" disabled={notifying}>
+                  <button className="button" disabled={notifying || !!busy || paymentReported}>
                     {notifying
                       ? "Avisando administração…"
-                      : "Já fiz o PIX — avisar administração"}
+                      : paymentReported ? "Pagamento informado" : "Já fiz o PIX — avisar administração"}
                   </button>
                 </form>
               )}
@@ -336,7 +381,7 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
                     disabled={
                       !offer ||
                       !owner ||
-                      !!busy ||
+                      !!busy || notifying ||
                       data.status === "suspended"
                     }
                     onClick={() => void startPayment(p.id)}
@@ -345,12 +390,16 @@ export default function BillingPanel({ owner }: { owner: boolean }) {
                       ? "Gerando PIX…"
                       : !offer
                         ? "Sob consulta"
-                        : data.payments_enabled
+                        : data.payments_enabled && !data.pix_enabled
                           ? "Pagar mensalidade"
                           : isCurrentPix
                             ? "Ver dados do PIX gerado"
                             : "Gerar PIX para pagar"}
                   </button>
+                  {offer && owner && data.payments_enabled && data.pix_enabled && (
+                    <button type="button" className="button outline" disabled={!!busy || notifying || !!pix || data.status === "suspended"}
+                      onClick={() => void startPayment(p.id, true)}>Pagar pelo gateway</button>
+                  )}
                 </article>
               );
             })}

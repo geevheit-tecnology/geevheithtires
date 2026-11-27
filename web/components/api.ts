@@ -6,6 +6,9 @@ export async function api(path: string, body?: unknown, method?: string) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json();
+  if (res.status === 402 && data.code === "plan_payment_required") {
+    window.dispatchEvent(new Event("plan-payment-required"));
+  }
   if (!res.ok)
     throw new ApiError(data.title || "Não foi possível concluir a solicitação.",res.status);
   return data;

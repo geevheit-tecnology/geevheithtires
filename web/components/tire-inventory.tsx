@@ -169,16 +169,19 @@ export default function TireInventory({
   onInspect,
   tireId,
   onClose,
+  onArchived,
 }: {
   tireId?: string;
   onClose?: () => void;
+  onArchived?: (message: string) => void;
   tires: Tire[];
   vehicles: Vehicle[];
   role: string;
   onChange: () => Promise<void>;
   onInspect: (t: Tire) => void;
 }) {
-  const {access}=usePlanAccess();
+  const {access, viewPlans}=usePlanAccess();
+  const mutationLock = useRef(false);
   const premiumAction=(action:string)=>["STOCK_TRANSFER","RECAP_SEND","RECAP_RETURN"].includes(action);
   const [filter, setFilter] = useState(""),
     [search, setSearch] = useState(""),
@@ -200,7 +203,10 @@ export default function TireInventory({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [visible, setVisible] = useState(false);
   function close() {
-    if (busy) return;
+    if (mutationLock.current) return;
+    finishClose();
+  }
+  function finishClose() {
     ++detailRequest.current;
     dialogRef.current?.close();
     setVisible(false);
@@ -217,10 +223,14 @@ export default function TireInventory({
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previous; };
   }, [visible]);
+  useEffect(() => {
+    if (error || notice) dialogRef.current?.scrollTo({ top: 0 });
+  }, [error, notice]);
   useEffect(() => { dialogRef.current?.scrollTo({top:0}); }, [details?.tire.id, details?.tire.version]);
   const move = access.can_write&&(role === "owner" || role === "manager" || role === "tire_tech"),
     manage = role === "owner" || role === "manager";
   async function open(tid: string) {
+    if (!visible) setNotice("");
     setVisible(true);
     const request = ++detailRequest.current;
     setLoading(true);
@@ -273,6 +283,7 @@ export default function TireInventory({
       (t) => t.position === position && t.id !== asset?.id,
     );
   async function start(value: string) {
+    if (mutationLock.current || loading) return;
     if(premiumAction(value)&&!access.features.advanced_lifecycle)return;
     setAction("");
     setError("");
@@ -296,7 +307,9 @@ export default function TireInventory({
   }
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!asset || !access.can_write || (premiumAction(action)&&!access.features.advanced_lifecycle)) return;
+    if (mutationLock.current || !asset || !access.can_write || (premiumAction(action)&&!access.features.advanced_lifecycle)) return;
+    mutationLock.current = true;
+    setNotice("");
     setBusy(true);
     setError("");
     const f = new FormData(e.currentTarget);
@@ -334,6 +347,28 @@ export default function TireInventory({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      mutationLock.current = false;
+      setBusy(false);
+    }
+  }
+  async function archive() {
+    if (!asset || mutationLock.current) return;
+    if (!window.confirm(`Excluir o pneu ${asset.code} da operação? O histórico será arquivado.`)) return;
+    mutationLock.current = true;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api(`tires/${asset.id}`, { expected_version: asset.version }, "DELETE");
+      const message = "Pneu excluído da operação. Histórico arquivado.";
+      await onChange();
+      finishClose();
+      setNotice(message);
+      onArchived?.(message);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      mutationLock.current = false;
       setBusy(false);
     }
   }
@@ -381,12 +416,12 @@ export default function TireInventory({
           placeholder="Digite para localizar um pneu"
         />
       </label>
-      {notice && (
-        <p className="info" role="status">
+      {!visible && notice && (
+        <p className="success" role="status">
           {notice}
         </p>
       )}
-      {error && (
+      {!visible && error && (
         <div className="error" role="alert">
           {error}
         </div>
@@ -521,7 +556,7 @@ export default function TireInventory({
       <div className="dossier-toolbar"><strong>Visão 360° · Dossiê do pneu</strong><button type="button" className="table-link" disabled={busy} onClick={close} autoFocus>Fechar</button></div>
       {loading && <TireLoader compact label="Carregando visão 360° e histórico…" />}
       {error && <p className="error" role="alert">{error}</p>}
-      {notice && <p className="info" role="status">{notice}</p>}
+      {notice && <p className="success" role="status">{notice}</p>}
       {asset && (
         <section className="surface lifecycle-details">
           <div className="surface-title">
@@ -552,13 +587,23 @@ export default function TireInventory({
             canEdit={move && access.can_write}
             savingPhoto={busy}
             onSavePhoto={async (photoData, photoThumb) => {
-              await api(`tires/${asset.id}/photo`, {
-                expected_version: asset.version,
-                photo_data: photoData,
-                photo_thumb: photoThumb,
-              }, "PATCH");
-              await onChange();
-              await open(asset.id);
+              if (mutationLock.current) throw new Error("Aguarde a ação em andamento.");
+              mutationLock.current = true;
+              setBusy(true);
+              try {
+                await api(`tires/${asset.id}/photo`, {
+                  expected_version: asset.version,
+                  photo_data: photoData,
+                  photo_thumb: photoThumb,
+                }, "PATCH");
+                setDetails(current => current?.tire.id === asset.id ? { ...current, tire: {
+                  ...current.tire, photo_data: photoData, photo_thumb: photoThumb, version: asset.version + 1,
+                }} : current);
+                await onChange();
+              } finally {
+                mutationLock.current = false;
+                setBusy(false);
+              }
             }}
           />
           <p>
@@ -578,6 +623,16 @@ export default function TireInventory({
             <p><strong>Posição e lado</strong><br/>{asset.position?positionLabel(asset.position):"Fora do veículo"}</p>
             <p><strong>Motorista do veículo</strong><br/>{asset.driver_name||"Não vinculado"}</p>
           </div>
+          {access.status === "expired" && <div className="error" role="alert">Seu plano venceu. <button type="button" className="table-link" onClick={() => { close(); viewPlans(); }}>Escolher plano e pagar</button></div>}
+          {manage && access.can_write && <button type="button" className="button danger" disabled={busy || loading} onClick={() => {
+            if (asset.vehicle_id) {
+              setNotice("");
+              setError("Retire o pneu do veículo antes de excluir.");
+              dialogRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+              return;
+            }
+            void archive();
+          }}>Excluir pneu</button>}
           {manage&&<TireIdentityEditor tire={asset} onSaved={async()=>{await onChange();await open(asset.id)}}/>}
           {move && access.can_write && (
             <details className="surface lifecycle-policy">
@@ -585,6 +640,9 @@ export default function TireInventory({
               <form
                 onSubmit={async (ev) => {
                   ev.preventDefault();
+                  if (mutationLock.current) return;
+                  mutationLock.current = true;
+                  setNotice("");
                   setBusy(true);
                   setError("");
                   try {
@@ -602,6 +660,7 @@ export default function TireInventory({
                   } catch (err) {
                     setError((err as Error).message);
                   } finally {
+                    mutationLock.current = false;
                     setBusy(false);
                   }
                 }}
