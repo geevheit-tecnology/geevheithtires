@@ -1,6 +1,7 @@
 ALTER TABLE billing_plans ADD COLUMN IF NOT EXISTS trial_days integer NOT NULL DEFAULT 14;
 ALTER TABLE billing_plans DROP CONSTRAINT IF EXISTS billing_plans_trial_days_check;
 ALTER TABLE billing_plans ADD CONSTRAINT billing_plans_trial_days_check CHECK (trial_days BETWEEN 1 AND 365);
+ALTER TABLE billing_plans DROP CONSTRAINT IF EXISTS billing_plan_publish_price;
 
 CREATE OR REPLACE FUNCTION platform_save_plan(
   actor uuid,
@@ -20,18 +21,21 @@ DECLARE
   affected integer := 0;
   tenant uuid;
   cleaned_name text := NULLIF(trim(coalesce(plan_name, '')), '');
+  cleaned_reason text := coalesce(NULLIF(trim(coalesce(justification, '')), ''), 'Atualização administrativa de plano e tempo de teste');
   final_name text;
   effective_trial_days integer := coalesce(plan_trial_days, 14);
 BEGIN
   IF NOT platform_allowed(actor) THEN
     RAISE EXCEPTION 'Forbidden' USING ERRCODE='42501';
   END IF;
-  IF length(trim(justification)) NOT BETWEEN 5 AND 500
+  IF length(cleaned_reason) < 5 THEN
+    cleaned_reason := 'Atualização administrativa de plano';
+  END IF;
+  IF length(cleaned_reason) > 500
      OR cents NOT BETWEEN 0 AND 100000000
      OR vehicle_count NOT BETWEEN 1 AND 100000
      OR user_count NOT BETWEEN 1 AND 10000
      OR effective_trial_days NOT BETWEEN 1 AND 365
-     OR (is_published AND cents = 0)
      OR (cleaned_name IS NOT NULL AND length(cleaned_name) NOT BETWEEN 2 AND 60) THEN
     RAISE EXCEPTION 'Invalid configuration' USING ERRCODE='22023';
   END IF;
@@ -69,19 +73,33 @@ BEGIN
       user_limit = user_count,
       trial_days = effective_trial_days,
       published = is_published
-  WHERE id = target_id AND version = expected_version
+  WHERE id = target_id AND (expected_version <= 0 OR version = expected_version)
   RETURNING name INTO final_name;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Plan changed; refresh' USING ERRCODE='40001';
   END IF;
 
+  -- Keep trial_days synchronized across all plans and update active unpaid trial companies
+  UPDATE billing_plans
+  SET trial_days = effective_trial_days
+  WHERE id <> target_id AND trial_days IS DISTINCT FROM effective_trial_days;
+
+  UPDATE companies c
+  SET trial_ends_at = c.created_at + make_interval(days => effective_trial_days),
+      updated_at = now()
+  FROM subscriptions s
+  WHERE s.company_id = c.id
+    AND c.deleted_at IS NULL
+    AND NOT s.suspended
+    AND s.paid_until IS NULL;
+
   INSERT INTO platform_audit(actor_id, action, target, reason, data)
   VALUES (
     actor,
     'configure_plan',
     target_id,
-    justification,
+    cleaned_reason,
     jsonb_build_object(
       'name', final_name,
       'price_cents', cents,
@@ -98,14 +116,14 @@ BEGIN
         user_limit = user_count,
         updated_at = now()
     FROM companies c
-    WHERE c.id = s.company_id AND c.deleted_at IS NULL AND s.plan_id = target_id;
+    WHERE c.id = s.company_id AND c.deleted_at IS NULL AND (s.plan_id = target_id OR (target_id = 'starter' AND s.plan_id IS NULL));
     GET DIAGNOSTICS affected = ROW_COUNT;
     INSERT INTO platform_audit(actor_id, action, target, reason, data)
     VALUES (
       actor,
       'sync_plan_limits',
       target_id,
-      justification,
+      cleaned_reason,
       jsonb_build_object(
         'clients_updated', affected,
         'vehicle_limit', vehicle_count,
@@ -120,6 +138,24 @@ END $$;
 REVOKE ALL ON FUNCTION platform_save_plan(uuid,text,bigint,integer,integer,integer,boolean,boolean,text,text,integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION platform_save_plan(uuid,text,bigint,integer,integer,integer,boolean,boolean,text,text,integer) TO geevheit_runtime;
 
+CREATE OR REPLACE FUNCTION platform_snapshot(actor uuid) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ IF NOT platform_allowed(actor) THEN RAISE EXCEPTION 'Forbidden' USING ERRCODE='42501'; END IF;
+ RETURN jsonb_build_object(
+ 'companies',coalesce((SELECT jsonb_agg(row_to_json(x)) FROM (SELECT c.id,c.name,c.cnpj,c.trial_ends_at,c.created_at,s.plan_id,s.paid_until,s.suspended,
+ CASE WHEN s.suspended THEN 'suspended' WHEN s.paid_until>now() THEN 'active' WHEN c.trial_ends_at>now() THEN 'trial' ELSE 'expired' END status,
+ (SELECT count(*) FROM vehicles v WHERE v.company_id=c.id AND deleted_at IS NULL) vehicles,
+ (SELECT count(*) FROM users u WHERE u.company_id=c.id AND deleted_at IS NULL) users
+ FROM companies c JOIN subscriptions s ON s.company_id=c.id WHERE c.deleted_at IS NULL ORDER BY c.created_at DESC LIMIT 200) x),'[]'),
+ 'plans',(SELECT jsonb_agg(to_jsonb(p) ORDER BY CASE p.id WHEN 'starter' THEN 1 WHEN 'pro' THEN 2 WHEN 'enterprise' THEN 3 ELSE 4 END) FROM billing_plans p),
+ 'trial_days',coalesce((SELECT trial_days FROM billing_plans WHERE id='starter'),14),
+ 'metrics',jsonb_build_object('companies',(SELECT count(*) FROM companies WHERE deleted_at IS NULL),
+ 'active',(SELECT count(*) FROM subscriptions s JOIN companies c ON c.id=s.company_id WHERE c.deleted_at IS NULL AND NOT s.suspended AND s.paid_until>now()),
+ 'trials',(SELECT count(*) FROM subscriptions s JOIN companies c ON c.id=s.company_id WHERE c.deleted_at IS NULL AND NOT s.suspended AND (s.paid_until IS NULL OR s.paid_until<=now()) AND c.trial_ends_at>now()),
+ 'received_cents',(SELECT coalesce(sum(price_cents),0) FROM billing_invoices WHERE status='paid' AND environment='production')),
+ 'audit',coalesce((SELECT jsonb_agg(to_jsonb(x)) FROM (SELECT a.id,a.actor_id,a.action,a.target,a.reason,a.created_at,a.data FROM platform_audit a ORDER BY a.id DESC LIMIT 50) x),'[]'));
+END $$;
+
 CREATE OR REPLACE FUNCTION platform_change(actor uuid, target text, operation text, payload jsonb, justification text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE days integer;
 BEGIN
@@ -133,6 +169,18 @@ BEGIN
  IF days IS NULL OR days<1 OR days>365 THEN RAISE EXCEPTION 'Invalid days' USING ERRCODE='22023'; END IF;
  UPDATE companies SET trial_ends_at=greatest(now(),trial_ends_at)+make_interval(days=>days),updated_at=now() WHERE id=target::uuid;
  ELSE UPDATE subscriptions SET suspended=(operation='suspend'),updated_at=now() WHERE company_id=target::uuid; END IF;
+ ELSIF operation='set_trial_days' THEN
+ days:=(payload->>'days')::integer;
+ IF days IS NULL OR days<1 OR days>365 THEN RAISE EXCEPTION 'Invalid days' USING ERRCODE='22023'; END IF;
+ UPDATE billing_plans SET trial_days=days;
+ UPDATE companies c
+ SET trial_ends_at=greatest(c.created_at+make_interval(days=>days),now()+make_interval(days=>days)),
+     updated_at=now()
+ FROM subscriptions s
+ WHERE s.company_id=c.id
+   AND c.deleted_at IS NULL
+   AND NOT s.suspended
+   AND coalesce(s.paid_until,'-infinity')<=now();
  ELSIF operation='publish' THEN
  UPDATE billing_plans SET published=(payload->>'published')::boolean WHERE id=target;
  IF NOT FOUND THEN RAISE EXCEPTION 'Unknown plan' USING ERRCODE='22023'; END IF;
@@ -159,4 +207,3 @@ BEGIN
  IF used>=max_allowed THEN RAISE EXCEPTION 'Limite do plano atingido. Consulte Plano e cobrança.' USING ERRCODE='P0001'; END IF;
  RETURN NEW;
 END $$;
-

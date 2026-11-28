@@ -106,12 +106,20 @@ func (a *App) platformChange(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &d) {
 		return
 	}
+	d.Reason = strings.TrimSpace(d.Reason)
+	if len(d.Reason) < 5 {
+		d.Reason = "Atualização administrativa da plataforma"
+	}
 	if len(d.Payload) == 0 {
 		d.Payload = json.RawMessage(`{}`)
 	}
+	d.Reason = strings.TrimSpace(d.Reason)
+	if len(d.Reason) < 5 {
+		d.Reason = "Atualização administrativa da plataforma"
+	}
 	_, e := a.db.Exec(r.Context(), "select platform_change($1,$2,$3,$4,$5)", claims(r).Subject, d.Target, d.Operation, d.Payload, d.Reason)
 	if e != nil {
-		problem(w, 422, "Operação inválida. Informe uma justificativa de 5 a 500 caracteres e confira os dados.")
+		problem(w, 422, "Operação inválida. Confira os dados informados.")
 		return
 	}
 	write(w, 200, map[string]bool{"ok": true})
@@ -130,7 +138,7 @@ func (a *App) billingStatus(w http.ResponseWriter, r *http.Request) {
  'vehicle_limit',case when s.paid_until>now() then s.vehicle_limit else coalesce((select vehicle_limit from billing_plans where id='starter'),15) end,'user_limit',case when s.paid_until>now() then s.user_limit else coalesce((select user_limit from billing_plans where id='starter'),3) end,
  'trial_days',coalesce((select (to_jsonb(bp)->>'trial_days')::integer from billing_plans bp where bp.id='starter'),14),
  'vehicles',(select count(*) from vehicles where company_id=c.id and deleted_at is null),'users',(select count(*) from users where company_id=c.id and deleted_at is null),
- 'plans',coalesce((select jsonb_agg(to_jsonb(p) order by price_cents) from billing_plans p where published),'[]'),
+ 'plans',coalesce((select jsonb_agg(to_jsonb(p) order by case p.id when 'starter' then 1 when 'pro' then 2 when 'enterprise' then 3 else 4 end) from billing_plans p),'[]'),
  'invoices',coalesce((select jsonb_agg(to_jsonb(x)) from (select b.id,plan_id,price_cents,status,checkout_url,due_date,paid_at,environment,source,reference,
  exists(select 1 from audit_log a where a.company_id=b.company_id and a.entity_id=b.id and a.entity='pix_payment_notified') as payment_notified
  from billing_invoices b where b.company_id=c.id order by b.created_at desc limit 24) x),'[]'))

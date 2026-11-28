@@ -32,7 +32,7 @@ func managementError(w http.ResponseWriter, e error) {
 			messages := map[string]string{"Usage exceeds plan limits": "O uso atual excede os limites do plano escolhido.", "Resolve open invoices before closing": "Regularize ou cancele as faturas em aberto antes de encerrar a empresa.", "Administrative account cannot be closed here": "Uma empresa com administradores da plataforma não pode ser encerrada por este fluxo.", "Confirm company CNPJ": "Digite o CNPJ da empresa para confirmar.", "Confirmation required": "A confirmação informada não corresponde ao cadastro."}
 			message := messages[p.Message]
 			if message == "" {
-				message = "Confira os limites, a vigência e a justificativa. Planos sem valor definido não podem ser publicados."
+				message = "Confira os limites, a vigência e os dados informados."
 			}
 			problem(w, 422, message)
 			return
@@ -108,6 +108,10 @@ func (a *App) platformConfigurePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Name = strings.TrimSpace(d.Name)
+	d.Reason = strings.TrimSpace(d.Reason)
+	if len(d.Reason) < 5 {
+		d.Reason = "Atualização administrativa das condições do plano"
+	}
 	nameLen := utf8.RuneCountInString(d.Name)
 	if d.Name != "" && (nameLen < 2 || nameLen > 60) {
 		problem(w, 422, "Informe um nome de plano entre 2 e 60 caracteres.")
@@ -117,8 +121,8 @@ func (a *App) platformConfigurePlan(w http.ResponseWriter, r *http.Request) {
 	if d.TrialDays != nil {
 		trialDays = *d.TrialDays
 	}
-	if d.Version < 1 || !validReason(d.Reason) || d.Price < 0 || d.Price > 100000000 || d.Vehicles < 1 || d.Vehicles > 100000 || d.Users < 1 || d.Users > 10000 || trialDays < 1 || trialDays > 365 || (d.Published && d.Price == 0) {
-		problem(w, 422, "Informe limites válidos, dias de teste (1 a 365) e justificativa. Para publicar, defina um valor maior que zero.")
+	if d.Version < 1 || !validReason(d.Reason) || d.Price < 0 || d.Price > 100000000 || d.Vehicles < 1 || d.Vehicles > 100000 || d.Users < 1 || d.Users > 10000 || trialDays < 1 || trialDays > 365 {
+		problem(w, 422, "Informe limites válidos e dias de teste entre 1 e 365.")
 		return
 	}
 	var result json.RawMessage

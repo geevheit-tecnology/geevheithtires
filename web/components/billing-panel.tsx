@@ -49,6 +49,7 @@ type Invoice = {
 type Billing = {
   status: string;
   trial_ends_at: string;
+  trial_days?: number;
   paid_until: string | null;
   vehicle_limit: number;
   user_limit: number;
@@ -235,11 +236,11 @@ Pix Copia e Cola: ${charge.pix_payload}`;
           <p>
             <strong>Plano em uso: {access.plan_name}.</strong>{" "}
             {data.status === "trial"
-              ? "A avaliação libera os recursos iniciais do plano."
+              ? `A avaliação gratuita de ${data.trial_days || access.trial_days || 14} dias libera os recursos iniciais do plano.`
               : "Confira abaixo os benefícios disponíveis para sua operação."}
           </p>
           <p>
-            Avaliação até {date(data.trial_ends_at)}
+            Avaliação ({data.trial_days || access.trial_days || 14} dias) até {date(data.trial_ends_at)}
             {data.paid_until ? ` · Acesso pago até ${date(data.paid_until)}` : ""}.
           </p>
           <p>
@@ -356,11 +357,12 @@ Pix Copia e Cola: ${charge.pix_payload}`;
             {planCatalog.map((p) => {
               const offer = data.plans.find((o) => o.id === p.id);
               const displayName = offer?.name || p.name;
+              const hasPrice = !!offer && offer.published && offer.price_cents > 0;
               const isCurrentPix = pix?.plan_id === p.id;
               return (
                 <article
                   className={`surface commercial-plan ${access.plan_id === p.id ? "current-plan" : ""}`}
-                  key={`${p.id}-${offer?.price_cents ?? 0}-${offer?.vehicle_limit ?? 0}-${offer?.user_limit ?? 0}`}
+                  key={`${p.id}-${offer?.price_cents ?? 0}-${offer?.vehicle_limit ?? 0}-${offer?.user_limit ?? 0}-${offer?.trial_days ?? 14}`}
                 >
                   <span className="plan-level">
                     {access.plan_id === p.id ? "SEU PLANO" : displayName}
@@ -368,19 +370,19 @@ Pix Copia e Cola: ${charge.pix_payload}`;
                   <h3>{displayName}</h3>
                   <p>{p.summary}</p>
                   <h2>
-                    {offer ? money(offer.price_cents) : provisionalPrice}
+                    {hasPrice ? money(offer.price_cents) : provisionalPrice}
                     <small> / mês</small>
                   </h2>
                   <p>
-                    {p.vehicle_limit
-                      ? `Até ${offer?.vehicle_limit || p.vehicle_limit} veículos e ${offer?.user_limit || p.user_limit} usuários.`
+                    {offer?.vehicle_limit || p.vehicle_limit
+                      ? `Até ${offer?.vehicle_limit || p.vehicle_limit} veículos e ${offer?.user_limit || p.user_limit} usuários · ${offer?.trial_days || data.trial_days || access.trial_days || 14} dias de teste grátis.`
                       : "Limites definidos em contrato; contratação sob consulta."}
                   </p>
                   <PlanBenefits features={p.features} planned={p.planned} />
                   <button
                     className="button primary"
                     disabled={
-                      !offer ||
+                      !hasPrice ||
                       !owner ||
                       !!busy || notifying ||
                       data.status === "suspended"
@@ -389,7 +391,7 @@ Pix Copia e Cola: ${charge.pix_payload}`;
                   >
                     {busy === p.id
                       ? "Gerando PIX…"
-                      : !offer
+                      : !hasPrice
                         ? "Sob consulta"
                         : data.payments_enabled && !data.pix_enabled
                           ? "Pagar mensalidade"
@@ -397,7 +399,7 @@ Pix Copia e Cola: ${charge.pix_payload}`;
                             ? "Ver dados do PIX gerado"
                             : "Gerar PIX para pagar"}
                   </button>
-                  {offer && owner && data.payments_enabled && data.pix_enabled && (
+                  {hasPrice && owner && data.payments_enabled && data.pix_enabled && (
                     <button type="button" className="button outline" disabled={!!busy || notifying || !!pix || data.status === "suspended"}
                       onClick={() => void startPayment(p.id, true)}>Pagar pelo gateway</button>
                   )}

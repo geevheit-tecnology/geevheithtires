@@ -88,6 +88,7 @@ const descriptions: Record<string, string> = {
 };
 const actionNames: Record<string, string> = {
   configure_plan: "Plano atualizado",
+  set_trial_days: "Tempo de teste gratuito alterado",
   sync_plan_limits: "Limites sincronizados com clientes",
   grant_access: "Vigência concedida",
   suspend: "Cliente suspenso",
@@ -308,7 +309,7 @@ export default function PlatformAdmin() {
                         label: "Assinaturas ativas",
                         value: data.metrics.active,
                         icon: ShieldCheck,
-                        note: `${data.metrics.trials} empresa(s) em avaliação`,
+                        note: `${data.metrics.trials} empresa(s) em avaliação (${data.plans.find((p) => p.id === "starter")?.trial_days ?? data.plans[0]?.trial_days ?? 14} dias)`,
                       },
                       {
                         label: "Recebido acumulado",
@@ -338,7 +339,8 @@ export default function PlatformAdmin() {
                       <span className="label">DA DECISÃO À OPERAÇÃO</span>
                       <h2>O controle está nas suas mãos.</h2>
                       <p>
-                        Atualize condições comerciais, acompanhe os recebimentos
+                        Atualize condições comerciais, defina o tempo de teste gratuito (atualmente{" "}
+                        <strong>{data.plans.find((p) => p.id === "starter")?.trial_days ?? data.plans[0]?.trial_days ?? 14} dias</strong>), acompanhe os recebimentos
                         e gerencie o acesso de cada empresa em um único lugar.
                       </p>
                     </div>
@@ -346,7 +348,7 @@ export default function PlatformAdmin() {
                       className="button"
                       onClick={() => navigate("plans")}
                     >
-                      Configurar planos <ArrowUpRight size={18} />
+                      Planos e tempo de teste <ArrowUpRight size={18} />
                     </button>
                   </section>
                   <div className="admin-overview-grid">
@@ -423,8 +425,8 @@ export default function PlatformAdmin() {
                           },
                           {
                             id: "plans",
-                            name: "Editar preços dos planos",
-                            text: "Starter, Pro e Enterprise",
+                            name: "Planos e tempo de teste",
+                            text: `Preços, limites e avaliação (${data.plans.find((p) => p.id === "starter")?.trial_days ?? data.plans[0]?.trial_days ?? 14} dias)`,
                             icon: CreditCard,
                           },
                           {

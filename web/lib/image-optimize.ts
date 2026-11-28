@@ -44,20 +44,25 @@ export async function optimizeTirePhoto(file: File): Promise<OptimizedTirePhoto>
       el.src = objectUrl;
     });
 
-    const mainCanvas = drawScaled(img, 720);
-    let quality = 0.72;
+    let maxDim = 760;
+    let mainCanvas = drawScaled(img, maxDim);
+    let quality = 0.76;
     let photoData = encodeCanvas(mainCanvas, quality);
     while (photoData.length > 180_000 && quality > 0.35) {
       quality -= 0.1;
       photoData = encodeCanvas(mainCanvas, quality);
     }
-    if (photoData.length > 195_000) {
-      const smaller = drawScaled(img, 512);
-      photoData = encodeCanvas(smaller, 0.62);
+    while (photoData.length > 190_000 && maxDim > 360) {
+      maxDim = Math.round(maxDim * 0.78);
+      mainCanvas = drawScaled(img, maxDim);
+      photoData = encodeCanvas(mainCanvas, 0.62);
     }
 
     const thumbCanvas = drawScaled(img, 96);
-    const photoThumb = encodeCanvas(thumbCanvas, 0.6);
+    let photoThumb = encodeCanvas(thumbCanvas, 0.6);
+    if (photoThumb.length > 18_500) {
+      photoThumb = encodeCanvas(drawScaled(img, 72), 0.5);
+    }
 
     const approxBytes = Math.round((photoData.length * 3) / 4);
     return {

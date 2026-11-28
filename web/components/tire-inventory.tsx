@@ -536,6 +536,7 @@ export default function TireInventory({
                       className="table-link"
                       disabled={busy || loading}
                       onClick={() => {
+                        setDetails(null);
                         setAction("");
                         void open(t.id);
                       }}
@@ -585,7 +586,7 @@ export default function TireInventory({
             pressurePsi={asset.pressure_psi}
             retreadCount={asset.retread_count}
             status={asset.status}
-            photoData={asset.photo_data}
+            photoData={asset.photo_data || asset.photo_thumb}
             canEdit={move && access.can_write}
             savingPhoto={busy}
             onSavePhoto={async (photoData, photoThumb) => {

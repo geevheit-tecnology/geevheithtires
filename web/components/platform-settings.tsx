@@ -1,10 +1,11 @@
 "use client";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { LogOut, ShieldCheck } from "lucide-react";
 import { api } from "./api";
 import { PlanBenefits } from "./plan-access";
 import { planCatalog } from "../lib/plan-catalog";
 import type { AdminPlan, AdminIdentity } from "./platform-admin";
+
 export function AdminPlans({
   plans,
   onChange,
@@ -12,9 +13,46 @@ export function AdminPlans({
   plans: AdminPlan[];
   onChange: () => Promise<void>;
 }) {
+  const starterTrial = plans.find((p) => p.id === "starter")?.trial_days ?? plans[0]?.trial_days ?? 14;
+  const [globalTrialDays, setGlobalTrialDays] = useState(starterTrial);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    setGlobalTrialDays(starterTrial);
+  }, [starterTrial]);
+
+  async function saveGlobalTrial(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const nextDays = Number(f.get("global_trial_days") || globalTrialDays || 14);
+    const customReason = String(f.get("trial_reason") || "").trim();
+    const reason =
+      customReason.length >= 5
+        ? customReason
+        : `Período de teste gratuito alterado para ${nextDays} dias em toda a plataforma`;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api("platform/change", {
+        target: "starter",
+        operation: "set_trial_days",
+        reason,
+        payload: { days: nextDays },
+      });
+      setNotice(
+        `Período de teste gratuito atualizado para ${nextDays} dias em todo o sistema (site público, cadastro, painel de clientes e empresas em avaliação).`,
+      );
+      await onChange();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function save(e: FormEvent<HTMLFormElement>, p: AdminPlan) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -24,9 +62,14 @@ export function AdminPlans({
     try {
       const nextName = String(f.get("name") || "").trim();
       const rawPrice = String(f.get("price") || "0").replace(",", ".");
-      const nextPriceCents = Math.round(Number(rawPrice) * 100);
+      const nextPriceCents = Math.max(0, Math.round(Number(rawPrice) * 100));
       const nextTrialDays = Number(f.get("trial_days") || p.trial_days || 14);
       const isPublished = f.get("published") === "on";
+      const customReason = String(f.get("reason") || "").trim();
+      const reason =
+        customReason.length >= 5
+          ? customReason
+          : `Atualização do plano ${nextName || p.name} (${nextTrialDays} dias de teste)`;
       const out = await api(
         `platform/plans/${p.id}`,
         {
@@ -38,14 +81,14 @@ export function AdminPlans({
           trial_days: nextTrialDays,
           published: isPublished,
           apply_limits: f.get("apply_limits") === "on",
-          reason: f.get("reason"),
+          reason,
         },
         "PUT",
       );
       const savedName = out.name || nextName || p.name;
       const savedTrial = out.trial_days || nextTrialDays;
       setNotice(
-        `Plano ${savedName} salvo (${savedTrial} dias de teste gratuito). ${isPublished ? "Nome, preço, tempo de teste e limites publicados na plataforma." : "ATENÇÃO: Plano salvo em rascunho. Marque 'Publicar preço e limites na plataforma' para exibir o novo valor no site e para os clientes."}${out.clients_updated ? ` Limites atualizados em ${out.clients_updated} cliente(s).` : " Mensalidades existentes preservadas."}`,
+        `Plano ${savedName} atualizado com sucesso (${savedTrial} dias de teste gratuito em todo o sistema). ${isPublished ? "Condições publicadas na plataforma." : "Plano salvo (marque 'Publicar na plataforma' para exibir o valor mensal no site)."}${out.clients_updated ? ` Limites sincronizados em ${out.clients_updated} cliente(s).` : ""}`,
       );
       await onChange();
     } catch (e) {
@@ -54,14 +97,56 @@ export function AdminPlans({
       setBusy(false);
     }
   }
+
   return (
     <>
+      <section className="surface management-section" style={{ marginBottom: 20 }}>
+        <div className="admin-section-heading">
+          <div>
+            <span className="label">CONFIGURAÇÃO GLOBAL DE AVALIAÇÃO</span>
+            <h2>Período de teste gratuito da plataforma ({starterTrial} dias atuais)</h2>
+            <p>
+              Ao alterar os dias de teste abaixo, o novo prazo passa a valer automaticamente em todo o sistema: site público, página de cadastro, termos, painel dos clientes e empresas em período de avaliação.
+            </p>
+          </div>
+          <ShieldCheck size={22} />
+        </div>
+        <form onSubmit={(e) => void saveGlobalTrial(e)}>
+          <fieldset className="plain-fields" disabled={busy}>
+            <div className="form-grid">
+              <label>
+                Tempo de teste gratuito (em dias)
+                <input
+                  type="number"
+                  name="global_trial_days"
+                  min="1"
+                  max="365"
+                  value={globalTrialDays}
+                  onChange={(e) => setGlobalTrialDays(Number(e.target.value))}
+                  required
+                />
+              </label>
+              <label>
+                Observação para auditoria (opcional)
+                <input
+                  type="text"
+                  name="trial_reason"
+                  maxLength={500}
+                  placeholder="Ex.: Campanha comercial ou ajuste padrão do teste"
+                />
+              </label>
+            </div>
+            <button className="button" disabled={busy}>
+              {busy ? "Atualizando sistema…" : `Aplicar ${globalTrialDays || starterTrial} dias de teste em todo o sistema`}
+            </button>
+          </fieldset>
+        </form>
+      </section>
+
       <div className="info admin-publication-note">
         <ShieldCheck size={20} />
         <p>
-          Publicar atualiza o preço e os limites no site e no painel dos
-          clientes. A sincronização opcional aplica os limites aos clientes já
-          vinculados. Mensalidades registradas preservam as condições originais.
+          Edite abaixo o nome, o preço mensal (use 0 para &ldquo;Sob consulta&rdquo;), os limites de veículos/usuários e o tempo de teste de cada plano.
         </p>
       </div>
       {error && (
@@ -80,7 +165,7 @@ export function AdminPlans({
           return (
             <article
               className="surface admin-plan-card"
-              key={`${p.id}-${p.version}-${p.price_cents}-${p.trial_days ?? 14}-${p.published}`}
+              key={`${p.id}-${p.version}-${p.price_cents}-${p.trial_days ?? starterTrial}-${p.published}`}
             >
               <div className="admin-plan-heading">
                 <span className="label">
@@ -92,7 +177,11 @@ export function AdminPlans({
                 <span
                   className={`admin-status ${p.published ? "positive" : "neutral"}`}
                 >
-                  {p.published ? "Publicado no site" : "Em rascunho (oculta valor novo no site)"}
+                  {p.published
+                    ? p.price_cents > 0
+                      ? "Publicado no site"
+                      : "Publicado (Sob consulta)"
+                    : "Em rascunho"}
                 </span>
                 <p>{spec?.summary}</p>
               </div>
@@ -111,7 +200,7 @@ export function AdminPlans({
                   </label>
                   <div className="form-grid">
                     <label>
-                      Valor mensal de {p.name} (R$)
+                      Valor mensal (R$) — 0 = Sob consulta
                       <input
                         type="number"
                         name="price"
@@ -137,14 +226,14 @@ export function AdminPlans({
                         name="trial_days"
                         min="1"
                         max="365"
-                        defaultValue={p.trial_days ?? 14}
+                        defaultValue={p.trial_days ?? starterTrial}
                         required
                       />
                     </label>
                   </div>
                   <div className="form-grid">
                     <label>
-                      Veículos de {p.name}
+                      Limite de veículos
                       <input
                         type="number"
                         name="vehicle_limit"
@@ -155,7 +244,7 @@ export function AdminPlans({
                       />
                     </label>
                     <label>
-                      Usuários de {p.name}
+                      Limite de usuários
                       <input
                         type="number"
                         name="user_limit"
@@ -173,30 +262,28 @@ export function AdminPlans({
                       defaultChecked={p.published}
                     />
                     <span>
-                      Publicar preço e limites na plataforma
+                      Publicar plano e limites na plataforma
                       <small>
-                        Para publicar, informe um valor maior que zero.
+                        Exibe o plano no site e para os clientes (valores R$ 0 aparecem como Sob consulta).
                       </small>
                     </span>
                   </label>
                   <label className="checkbox">
-                    <input type="checkbox" name="apply_limits" />
+                    <input type="checkbox" name="apply_limits" defaultChecked />
                     <span>
                       Atualizar limites dos clientes deste plano
                       <small>
-                        O sistema impede limites menores que o uso atual de
-                        qualquer cliente.
+                        Sincroniza os novos limites de veículos e usuários com os clientes atuais deste plano.
                       </small>
                     </span>
                   </label>
                   <label>
-                    Justificativa para alterar {p.name}
-                    <textarea
+                    Observação / justificativa (opcional)
+                    <input
+                      type="text"
                       name="reason"
-                      rows={3}
-                      minLength={5}
                       maxLength={500}
-                      required
+                      placeholder="Ex.: Ajuste comercial de preços e limites"
                     />
                   </label>
                   <button className="button" disabled={busy}>

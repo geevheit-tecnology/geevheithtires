@@ -550,7 +550,7 @@ export default function Panel() {
         <div className="sidebar-bottom">
           <span className="trial-label">
             {dash?.company.status === "trial"
-              ? "Período de avaliação"
+              ? `Período de avaliação (${access.trial_days || 14} dias)`
               : "Sua operação conectada"}
           </span>
           <p>

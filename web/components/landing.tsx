@@ -469,7 +469,7 @@ export default function Home() {
             </h2>
           </div>
           <Link href="/cadastro" className="button">
-            Começar meu teste <ArrowUpRight size={21} />
+            Começar meu teste de {trialDays} dias <ArrowUpRight size={21} />
           </Link>
         </section>
       </main>
