@@ -1,0 +1,256 @@
+package server
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"geevheittire/api/internal/commercial"
+)
+
+func managementError(w http.ResponseWriter, e error) {
+	var p *pgconn.PgError
+	if errors.As(e, &p) {
+		switch p.Code {
+		case "40001":
+			problem(w, 409, "O registro mudou. Atualize a tela antes de salvar.")
+			return
+		case "P0002":
+			problem(w, 404, "Registro não encontrado ou já encerrado.")
+			return
+		case "42501":
+			problem(w, 403, "Operação não autorizada para esta conta.")
+			return
+		case "22023", "23514":
+			messages := map[string]string{"Usage exceeds plan limits": "O uso atual excede os limites do plano escolhido.", "Resolve open invoices before closing": "Regularize ou cancele as faturas em aberto antes de encerrar a empresa.", "Administrative account cannot be closed here": "Uma empresa com administradores da plataforma não pode ser encerrada por este fluxo.", "Confirm company CNPJ": "Digite o CNPJ da empresa para confirmar.", "Confirmation required": "A confirmação informada não corresponde ao cadastro."}
+			message := messages[p.Message]
+			if message == "" {
+				message = "Confira os limites, a vigência e os dados informados."
+			}
+			problem(w, 422, message)
+			return
+		case "23505":
+			problem(w, 409, "Já existe uma mensalidade em aberto para este cliente. Regularize-a antes de criar outra.")
+			return
+		}
+	}
+	problem(w, 500, "Não foi possível concluir a operação administrativa.")
+}
+func validPageID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	v := chi.URLParam(r, "id")
+	if uuid.Validate(v) != nil {
+		problem(w, 404, "Registro não encontrado.")
+		return "", false
+	}
+	return v, true
+}
+func validReason(s string) bool { return len(strings.TrimSpace(s)) >= 5 && len(s) <= 500 }
+func (a *App) platformClients(w http.ResponseWriter, r *http.Request) {
+	if !a.platformOK(w, r) {
+		return
+	}
+	q := r.URL.Query()
+	cursor := q.Get("before")
+	if cursor != "" && uuid.Validate(cursor) != nil {
+		problem(w, 422, "Cursor inválido.")
+		return
+	}
+	var out json.RawMessage
+	if e := a.db.QueryRow(r.Context(), "select platform_clients($1,$2,$3,$4)", claims(r).Subject, strings.TrimSpace(q.Get("search")), q.Get("status"), cursor).Scan(&out); e != nil {
+		managementError(w, e)
+		return
+	}
+	write(w, 200, out)
+}
+func (a *App) platformClientDetail(w http.ResponseWriter, r *http.Request) {
+	if !a.platformOK(w, r) {
+		return
+	}
+	tid, ok := validPageID(w, r)
+	if !ok {
+		return
+	}
+	var out json.RawMessage
+	if e := a.db.QueryRow(r.Context(), "select platform_client_detail($1,$2)", claims(r).Subject, tid).Scan(&out); e != nil {
+		managementError(w, e)
+		return
+	}
+	write(w, 200, out)
+}
+func (a *App) platformConfigurePlan(w http.ResponseWriter, r *http.Request) {
+	if !a.platformOK(w, r) {
+		return
+	}
+	plan := chi.URLParam(r, "id")
+	if _, ok := commercial.Find(plan); !ok {
+		problem(w, 422, "Plano desconhecido.")
+		return
+	}
+	var d struct {
+		Version     int64  `json:"expected_version"`
+		Name        string `json:"name"`
+		Price       int    `json:"price_cents"`
+		Vehicles    int    `json:"vehicle_limit"`
+		Users       int    `json:"user_limit"`
+		TrialDays   *int   `json:"trial_days"`
+		Published   bool   `json:"published"`
+		ApplyLimits bool   `json:"apply_limits"`
+		Reason      string `json:"reason"`
+	}
+	if !decode(w, r, &d) {
+		return
+	}
+	d.Name = strings.TrimSpace(d.Name)
+	d.Reason = strings.TrimSpace(d.Reason)
+	if len(d.Reason) < 5 {
+		d.Reason = "Atualização administrativa das condições do plano"
+	}
+	nameLen := utf8.RuneCountInString(d.Name)
+	if d.Name != "" && (nameLen < 2 || nameLen > 60) {
+		problem(w, 422, "Informe um nome de plano entre 2 e 60 caracteres.")
+		return
+	}
+	trialDays := 14
+	if d.TrialDays != nil {
+		trialDays = *d.TrialDays
+	}
+	if d.Version < 1 || !validReason(d.Reason) || d.Price < 0 || d.Price > 100000000 || d.Vehicles < 1 || d.Vehicles > 100000 || d.Users < 1 || d.Users > 10000 || trialDays < 1 || trialDays > 365 {
+		problem(w, 422, "Informe limites válidos e dias de teste entre 1 e 365.")
+		return
+	}
+	var result json.RawMessage
+	e := a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason, d.Name, trialDays).Scan(&result)
+	if e != nil {
+		var p *pgconn.PgError
+		if errors.As(e, &p) && p.Code == "42883" {
+			// Fallback if 11-arg or 10-arg function is not yet installed in DB
+			e = a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason, d.Name).Scan(&result)
+			if e != nil && errors.As(e, &p) && p.Code == "42883" {
+				e = a.db.QueryRow(r.Context(), "select platform_save_plan($1,$2,$3,$4,$5,$6,$7,$8,$9)", claims(r).Subject, plan, d.Version, d.Price, d.Vehicles, d.Users, d.Published, d.ApplyLimits, d.Reason).Scan(&result)
+			}
+		}
+		if e != nil {
+			managementError(w, e)
+			return
+		}
+	}
+	write(w, 200, result)
+}
+func (a *App) platformClientAccess(w http.ResponseWriter, r *http.Request) {
+	if !a.platformOK(w, r) {
+		return
+	}
+	tid, ok := validPageID(w, r)
+	if !ok {
+		return
+	}
+	var d struct {
+		Plan    string    `json:"plan_id"`
+		Days    int       `json:"days"`
+		Updated time.Time `json:"expected_updated_at"`
+		Reason  string    `json:"reason"`
+	}
+	if !decode(w, r, &d) {
+		return
+	}
+	if _, ok := commercial.Find(d.Plan); !ok || d.Days < 1 || d.Days > 366 || d.Updated.IsZero() || !validReason(d.Reason) {
+		problem(w, 422, "Confira plano, prazo e justificativa.")
+		return
+	}
+	if _, e := a.db.Exec(r.Context(), "select platform_client_access($1,$2,$3,$4,$5,$6)", claims(r).Subject, tid, d.Plan, d.Days, d.Updated, d.Reason); e != nil {
+		managementError(w, e)
+		return
+	}
+	write(w, 200, map[string]bool{"ok": true})
+}
+func (a *App) platformCloseClient(w http.ResponseWriter, r *http.Request) {
+	if !a.platformOK(w, r) {
+		return
+	}
+	tid, ok := validPageID(w, r)
+	if !ok {
+		return
+	}
+	var d struct {
+		Confirmation string `json:"confirmation"`
+		Reason       string `json:"reason"`
+	}
+	if !decode(w, r, &d) {
+		return
+	}
+	if !validReason(d.Reason) || len(d.Confirmation) > 100 {
+		problem(w, 422, "Informe confirmação e justificativa.")
+		return
+	}
+	if _, e := a.db.Exec(r.Context(), "select platform_close_client($1,$2,$3,$4)", claims(r).Subject, tid, d.Confirmation, d.Reason); e != nil {
+		managementError(w, e)
+		return
+	}
+	write(w, 200, map[string]bool{"ok": true})
+}
+func (a *App) publicPlans(w http.ResponseWriter, r *http.Request) {
+	rows, e := a.db.Query(r.Context(), "select id,name,vehicle_limit,user_limit,price_cents,coalesce((to_jsonb(billing_plans)->>'trial_days')::integer,14),published from billing_plans")
+	if e != nil {
+		problem(w, 503, "Não foi possível consultar os planos.")
+		return
+	}
+	defer rows.Close()
+	type planOffer struct {
+		name      string
+		vehicles  int
+		users     int
+		price     int
+		trialDays int
+		published bool
+	}
+	offers := map[string]planOffer{}
+	trialDays := 14
+	for rows.Next() {
+		var id, name string
+		var vehicles, users, price, tDays int
+		var published bool
+		if e = rows.Scan(&id, &name, &vehicles, &users, &price, &tDays, &published); e != nil {
+			problem(w, 503, "Não foi possível consultar os planos.")
+			return
+		}
+		if tDays < 1 {
+			tDays = 14
+		}
+		if id == "starter" {
+			trialDays = tDays
+		}
+		offers[id] = planOffer{name: strings.TrimSpace(name), vehicles: vehicles, users: users, price: price, trialDays: tDays, published: published}
+	}
+	if rows.Err() != nil {
+		problem(w, 503, "Não foi possível consultar os planos.")
+		return
+	}
+	out := []map[string]any{}
+	for _, p := range commercial.Definition.Plans {
+		raw, _ := json.Marshal(p)
+		var item map[string]any
+		_ = json.Unmarshal(raw, &item)
+		item["display_price_cents"] = 0
+		item["trial_days"] = trialDays
+		if offer, ok := offers[p.ID]; ok {
+			item["trial_days"] = offer.trialDays
+			if offer.name != "" {
+				item["name"] = offer.name
+			}
+			item["vehicle_limit"] = offer.vehicles
+			item["user_limit"] = offer.users
+			if offer.published {
+				item["display_price_cents"] = offer.price
+			}
+		}
+		out = append(out, item)
+	}
+	write(w, 200, map[string]any{"plans": out, "trial_days": trialDays})
+}

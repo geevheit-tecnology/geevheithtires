@@ -1,0 +1,5 @@
+# Keep the saved index in Git at the project owner's request.
+# Runtime files, logs, sockets and SQLite journals remain local.
+*
+!.gitignore
+!codegraph.db

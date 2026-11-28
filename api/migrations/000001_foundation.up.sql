@@ -48,6 +48,6 @@ DO $$ DECLARE tab text; BEGIN
  FOREACH tab IN ARRAY ARRAY['vehicles','tires','inspections','alerts','audit_log'] LOOP
  EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',tab);
  EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY',tab);
- EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (company_id = nullif(current_setting(''app.company_id'',true),)::uuid) WITH CHECK (company_id = nullif(current_setting(app.company_id,true),)::uuid)',tab);
+ EXECUTE format($policy$CREATE POLICY tenant_isolation ON %I USING (company_id = nullif(current_setting('app.company_id',true),'')::uuid) WITH CHECK (company_id = nullif(current_setting('app.company_id',true),'')::uuid)$policy$,tab);
  END LOOP;
 END $$;
